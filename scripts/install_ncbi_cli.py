@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import ssl
 import stat
 import tempfile
 import urllib.request
@@ -27,6 +28,21 @@ import zipfile
 
 
 GITHUB_API = "https://api.github.com/repos/ncbi/datasets/releases/latest"
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Return an SSL context, optionally disabling verification.
+
+    If the environment variable ``NCBI_CLI_SKIP_SSL`` is set, certificate
+    verification and hostname checking are disabled.  This is **insecure** and
+    should only be used on trusted networks.
+    """
+
+    context = ssl.create_default_context()
+    if os.getenv("NCBI_CLI_SKIP_SSL"):
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    return context
 
 
 def _detect_platform() -> tuple[str, str]:
@@ -56,11 +72,12 @@ def _detect_platform() -> tuple[str, str]:
     return os_name, arch
 
 
-def _get_download_url(os_name: str, arch: str) -> str:
+def _get_download_url(os_name: str, arch: str, context: ssl.SSLContext) -> str:
     """Fetch the download URL for the zip asset matching ``os_name``/``arch``."""
 
     asset_name = f"{os_name}-{arch}.cli.package.zip"
-    with urllib.request.urlopen(GITHUB_API) as resp:
+    with urllib.request.urlopen(GITHUB_API, context=context) as resp:
+
         release = json.load(resp)
 
     for asset in release.get("assets", []):
@@ -74,7 +91,9 @@ def install_tools() -> None:
     """Download and install the datasets and dataformat binaries."""
 
     os_name, arch = _detect_platform()
-    url = _get_download_url(os_name, arch)
+    context = _ssl_context()
+    url = _get_download_url(os_name, arch, context)
+
 
     repo_root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     bin_dir = os.path.join(repo_root, "bin")
@@ -82,7 +101,9 @@ def install_tools() -> None:
 
     with tempfile.TemporaryDirectory() as tmpdir:
         zip_path = os.path.join(tmpdir, "cli.zip")
-        urllib.request.urlretrieve(url, zip_path)
+        with urllib.request.urlopen(url, context=context) as resp, open(zip_path, "wb") as fh:
+            fh.write(resp.read())
+
         with zipfile.ZipFile(zip_path) as zf:
             for member in ("datasets", "dataformat"):
                 zf.extract(member, bin_dir)
