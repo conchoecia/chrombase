@@ -77,6 +77,7 @@ def _get_download_url(os_name: str, arch: str, context: ssl.SSLContext) -> str:
 
     asset_name = f"{os_name}-{arch}.cli.package.zip"
     with urllib.request.urlopen(GITHUB_API, context=context) as resp:
+
         release = json.load(resp)
 
     for asset in release.get("assets", []):
@@ -93,6 +94,7 @@ def install_tools() -> None:
     context = _ssl_context()
     url = _get_download_url(os_name, arch, context)
 
+
     repo_root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     bin_dir = os.path.join(repo_root, "bin")
     os.makedirs(bin_dir, exist_ok=True)
@@ -101,6 +103,7 @@ def install_tools() -> None:
         zip_path = os.path.join(tmpdir, "cli.zip")
         with urllib.request.urlopen(url, context=context) as resp, open(zip_path, "wb") as fh:
             fh.write(resp.read())
+
         with zipfile.ZipFile(zip_path) as zf:
             for member in ("datasets", "dataformat"):
                 zf.extract(member, bin_dir)
