@@ -44,3 +44,16 @@ snakemake -s src/GenDB_build_db_unannotated_chr.snakefile --cores <n>
 
 The workflows rely on the NCBI `datasets` and `dataformat` command-line
 tools, which must be installed and discoverable in your `PATH`.
+=======
+## Installing required tools
+
+This project relies on the NCBI `datasets` and `dataformat` command line
+utilities.  The repository includes a helper script and make target that
+downloads the most recent release of these binaries from GitHub and places
+them in the `bin/` directory.  Simply run:
+
+```
+make
+```
+
+to fetch the tools along with other dependencies.

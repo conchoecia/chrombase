@@ -113,32 +113,17 @@ rule all:
         expand(config["tool"] + "/input/report_history_raw_{taxid}.pdf",
                 taxid = config["taxids"])
 
-rule install_datasets:
+rule install_ncbi_tools:
     output:
-        datasets = os.path.join(bin_path, "datasets")
+        datasets = os.path.join(bin_path, "datasets"),
+        dataformat = os.path.join(bin_path, "dataformat"),
     threads: 1
     resources:
         time   = 5, # 5 minutes
         mem_mb = 1000
     shell:
         """
-        curl -o datasets 'https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/LATEST/linux-amd64/datasets'
-        mv datasets {output.datasets}
-        chmod +x {output.datasets}
-        """
-
-rule install_dataformat:
-    output:
-        dataformat = os.path.join(bin_path, "dataformat")
-    threads: 1
-    resources:
-        time   = 5, # 5 minutes
-        mem_mb = 1000
-    shell:
-        """
-        curl -o dataformat 'https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd64/dataformat'
-        mv dataformat {output.dataformat}
-        chmod +x {output.dataformat}
+        python {snakefile_path}/../scripts/install_ncbi_cli.py
         """
 
 rule download_json:
