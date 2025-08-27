@@ -1,1 +1,3 @@
 src/fasta.py
+bin/
+__pycache__/
