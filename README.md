@@ -4,8 +4,7 @@ Tools to build a database of chromosome-scale genomes
 ## Installation
 
 Clone the repository and run `make` to fetch required dependencies,
-including the [fastapy](https://github.com/aziele/fastapy) parser that is
-placed under `dependencies/fasta-parser`.
+including the [fastapy](https://github.com/aziele/fastapy) parser, and NCBI [datasets](https://github.com/ncbi/datasets).
 
 ```bash
 git clone https://github.com/aziele/chrombase
