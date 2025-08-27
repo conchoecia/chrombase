@@ -15,7 +15,7 @@ import yaml
 import os
 import sys
 snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
-dependencies_path = os.path.join(snakefile_path, "../dependencies/fasta-parser")
+dependencies_path = os.path.join(snakefile_path, "../dependencies")
 sys.path.insert(1, dependencies_path)
 import fasta
 

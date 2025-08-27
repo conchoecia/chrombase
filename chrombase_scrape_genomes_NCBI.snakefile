@@ -32,12 +32,7 @@ from datetime import datetime
 
 # import fasta parser from dependencies
 snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
-bin_path = os.path.join(snakefile_path, "../bin")
-
-# in theory we can just remove this
-#dependencies_path = os.path.join(snakefile_path, "../dependencies/fasta-parser")
-#sys.path.insert(1, dependencies_path)
-#import fasta
+bin_path = os.path.join(snakefile_path, "../dependencies")
 
 configfile: "config.yaml"
 
