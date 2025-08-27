@@ -1,15 +1,22 @@
 # chrombase
-Tools to build a database of chromosome-scale genomes
+Tools to build a database of chromosome-scale genomes.
+This is developed for and intended to be used on Linux systems.
 
 ## Installation
 
 Clone the repository and run `make` to fetch required dependencies,
 including the [fastapy](https://github.com/aziele/fastapy) parser, and NCBI [datasets](https://github.com/ncbi/datasets).
 
+If your network environment lacks a proper certificate store, you can skip
+SSL verification (insecure) by setting `NCBI_CLI_SKIP_SSL=1` when invoking
+`make`:
+
 ```bash
 git clone https://github.com/aziele/chrombase
 cd chrombase
 make
+NCBI_CLI_SKIP_SSL=1 make # if you encounter SSL issues
+
 ```
 
 After installation, Chrombase provides Python utilities and Snakemake
@@ -43,24 +50,3 @@ snakemake -s src/GenDB_build_db_unannotated_chr.snakefile --cores <n>
 
 The workflows rely on the NCBI `datasets` and `dataformat` command-line
 tools, which must be installed and discoverable in your `PATH`.
-
-## Installing required tools
-
-This project relies on the NCBI `datasets` and `dataformat` command line
-utilities.  The repository includes a helper script and make target that
-downloads the most recent release of these binaries from GitHub and places
-them in the `bin/` directory.  Simply run:
-
-```
-make
-```
-
-to fetch the tools along with other dependencies.
-
-If your network environment lacks a proper certificate store, you can skip
-SSL verification (insecure) by setting `NCBI_CLI_SKIP_SSL=1` when invoking
-`make`:
-
-```
-NCBI_CLI_SKIP_SSL=1 make
-```
