@@ -1052,7 +1052,7 @@ rule assembly_report_plot_filtered:
     """
     input:
         report          = config["tool"] + "/input/report_history_filtered_{taxid}.tsv",
-        plotting_script = os.path.join(snakefile_path, "../scripts/plot_NCBI_genomes_history.py")
+        plotting_script = os.path.join(snakefile_path, "scripts/plot_NCBI_genomes_history.py")
     output:
         pdf             = config["tool"] + "/input/report_history_filtered_{taxid}.pdf",
     threads: 1
@@ -1126,7 +1126,7 @@ rule assembly_report_plot_raw:
     """
     input:
         report          = config["tool"] + "/input/report_history_raw_{taxid}.tsv",
-        plotting_script = os.path.join(snakefile_path, "../scripts/plot_NCBI_genomes_history.py")
+        plotting_script = os.path.join(snakefile_path, "scripts/plot_NCBI_genomes_history.py")
     output:
         pdf             = config["tool"] + "/input/report_history_raw_{taxid}.pdf",
     threads: 1
