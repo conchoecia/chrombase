@@ -951,7 +951,7 @@ rule get_representative_genomes:
     """
     input:
         report_tsv = config["tool"] + "/input/{taxid}.tsv",
-        assembly_ignore_list = os.path.join(snakefile_path, "assembly_ignore_list.txt")
+        assembly_ignore_list = os.path.join(snakefile_path, "data/assembly_ignore_list.txt")
     output:
         report                 = config["tool"] + "/input/report_{taxid}.tsv",
         representative_genomes = config["tool"] + "/input/selected_genomes_{taxid}.tsv"
@@ -973,8 +973,11 @@ rule get_representative_genomes:
                 # ignore empty lines
                 if len(line) == 0:
                     continue
-                # add this line to the set of assemblies to ignore
-                ignore_list.append(line)
+                # Add this line to the set of assemblies to ignore
+                # Get the entry as the string until the first whitespace
+                # Should be tab or a space character.
+                entry = line.split()[0]
+                ignore_list.append(entry)
         # add hardcoded_ignore_accessions to the ignore_list
         ignore_list = set(ignore_list + hardcoded_ignore_accessions)
 
