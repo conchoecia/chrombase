@@ -2,6 +2,19 @@
 Tools to build a database of chromosome-scale genomes.
 This is developed for and intended to be used on Linux systems.
 
+## Prerequisites
+
+Developed and tested on Ubuntu and variants of Red Hat Linux.
+Your working environment should have the following tools installed:
+- `git`
+- `make`
+- `snakemake`
+- `python3`
+- `ete4`
+
+Before using this software, build a local NCBI Taxonomy database with
+`ete4` using [this guide](https://etetoolkit.github.io/ete/tutorial/tutorial_taxonomy.html#setting-up-local-copies-of-the-ncbi-and-gtdb-taxonomy-databases).
+
 ## Installation
 
 Clone the repository and run `make` to fetch required dependencies,

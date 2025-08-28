@@ -4,12 +4,12 @@ Date: 2023-12-19 This is an updated version of the original script that focuses 
 Build a database of chromosome-scale genome assemblies using the NCBI website
 
 PREREQUISITES:
-  - This script requires the ete3 toolkit to be installed. This can be done with conda:
-    https://anaconda.org/conda-forge/ete3
+  - This script requires the ete4 toolkit to be installed. This can be done with conda:
+    https://etetoolkit.org/download/
   - You must also preload the taxonomy toolkit with the following commands:
-    http://etetoolkit.org/docs/latest/tutorial/tutorial_ncbitaxonomy.html
+    https://etetoolkit.github.io/ete/tutorial/tutorial_taxonomy.html#setting-up-local-copies-of-the-ncbi-and-gtdb-taxonomy-databases
     ```
-    from ete3 import NCBITaxa
+    from ete4 import NCBITaxa
     ncbi = NCBITaxa()
     ncbi.update_taxonomy_database()
     ```
@@ -23,7 +23,7 @@ hardcoded_ignore_accessions = ["GCA_900186335.3",
                                ]
 import datetime
 from datetime import timedelta
-from ete3 import NCBITaxa
+from ete4 import NCBITaxa
 import itertools
 import numpy as np
 import os
@@ -34,7 +34,7 @@ from datetime import datetime
 snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
 bin_path = os.path.join(snakefile_path, "../dependencies")
 
-configfile: "config.yaml"
+configfile: "chrombase.config.yaml"
 
 if "datetime" not in config:
     config["datetime"] = datetime.now().strftime('%Y%m%d%H%M')
@@ -988,7 +988,7 @@ rule get_representative_genomes:
         summarydf = dataset_summary_table(df)
         summarydf.to_csv(output.report, sep="\t", index=False)
 
-        # make a new column called Lineage. Get the NCBI Taxa lineage from ete3 NCBITaxa
+        # make a new column called Lineage. Get the NCBI Taxa lineage from ete4 NCBITaxa
         ncbi = NCBITaxa()
         taxid_dict = {taxid: ";".join([str(x) for x in ncbi.get_lineage(taxid)]) for taxid in list(df["Organism Taxonomic ID"].unique())}
         df["Lineage"] = df["Organism Taxonomic ID"].map(taxid_dict)
