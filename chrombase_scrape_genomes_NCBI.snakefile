@@ -32,7 +32,7 @@ from datetime import datetime
 
 # import fasta parser from dependencies
 snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
-bin_path = os.path.join(snakefile_path, "../dependencies")
+bin_path          = os.path.join(snakefile_path, "bin")
 
 configfile: "chrombase.config.yaml"
 
@@ -118,7 +118,7 @@ rule install_ncbi_tools:
         mem_mb = 1000
     shell:
         """
-        python {snakefile_path}/../scripts/install_ncbi_cli.py
+        python {snakefile_path}/scripts/install_ncbi_cli.py
         """
 
 rule download_json:

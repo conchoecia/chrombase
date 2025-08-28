@@ -15,12 +15,12 @@ import yaml
 import os
 import sys
 snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
-dependencies_path = os.path.join(snakefile_path, "../dependencies")
+dependencies_path = os.path.join(snakefile_path, "dependencies")
 sys.path.insert(1, dependencies_path)
 import fasta
 
 # figure out where bin is because we need to use some outside tools
-bin_path = os.path.join(snakefile_path, "../bin")
+bin_path = os.path.join(snakefile_path, "bin")
 
 configfile: "config.yaml"
 config["tool"] = "odp_ncbi_genome_db"
