@@ -37,7 +37,10 @@ bin_path          = os.path.join(snakefile_path, "bin")
 configfile: "chrombase.config.yaml"
 
 if "datetime" not in config:
-    config["datetime"] = datetime.now().strftime('%Y%m%d%H%M')
+    # previously We recorded down to the hour and minute, but this felt a bit excessive
+    #config["datetime"] = datetime.now().strftime('%Y%m%d%H%M')
+    config["datetime"] = datetime.now().strftime('%Y%m%d')
+
 
 config["tool"] = "odp_ncbi_genome_scraper"
 
@@ -95,18 +98,18 @@ rule all:
         expand(config["tool"] + "/output/unannotated_genomes_nonchr_{datetime}.tsv",
                 datetime = config["datetime"]),
         # report of the final dataset
-        expand(config["tool"] + "/input/report_{taxid}.tsv",
-                taxid = config["taxids"]),
+        expand(config["tool"] + "/input/report_{taxid}_{datetime}.tsv",
+                taxid = config["taxids"], datetime = config["datetime"]),
         # report and plot of the filtered dataset
-        expand(config["tool"] + "/input/report_history_filtered_{taxid}.tsv",
-                taxid = config["taxids"]),
-        expand(config["tool"] + "/input/report_history_filtered_{taxid}.pdf",
-                taxid = config["taxids"]),
+        expand(config["tool"] + "/input/report_history_filtered_{taxid}_{datetime}.tsv",
+                taxid = config["taxids"], datetime = config["datetime"]),
+        expand(config["tool"] + "/input/report_history_filtered_{taxid}_{datetime}.pdf",
+                taxid = config["taxids"], datetime = config["datetime"]),
         # report and plot of the unfiltered dataset. This is more appropriate for looking at the growth of NCBI genomes.
-        expand(config["tool"] + "/input/report_history_raw_{taxid}.tsv",
-                taxid = config["taxids"]),
-        expand(config["tool"] + "/input/report_history_raw_{taxid}.pdf",
-                taxid = config["taxids"])
+        expand(config["tool"] + "/input/report_history_raw_{taxid}_{datetime}.tsv",
+                taxid = config["taxids"], datetime = config["datetime"]),
+        expand(config["tool"] + "/input/report_history_raw_{taxid}_{datetime}.pdf",
+                taxid = config["taxids"], datetime = config["datetime"]),
 
 rule install_ncbi_tools:
     output:
@@ -125,7 +128,7 @@ rule download_json:
     input:
         datasets = os.path.join(bin_path, "datasets"),
     output:
-        genome_report = config["tool"] + "/input/{taxid}.json"
+        genome_report = config["tool"] + "/input/{taxid}_{datetime}.json"
     threads: 1
     resources:
         time   = 5, # 5 minutes
@@ -392,10 +395,10 @@ fields_to_print = ["accession",
 
 rule format_json_to_tsv:
     input:
-        genome_report = config["tool"] + "/input/{taxid}.json",
+        genome_report = config["tool"] + "/input/{taxid}_{datetime}.json",
         dataformat = os.path.join(bin_path, "dataformat")
     output:
-        report_tsv = temp(config["tool"] + "/input/{taxid}.tsv")
+        report_tsv = temp(config["tool"] + "/input/{taxid}_{datetime}.tsv")
     params:
         fields = ",".join(fields_to_print),
         #fields = ",".join(all_fields)
@@ -709,6 +712,16 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
     print("    This doesn't really do anything because at this point, these rows will be duplicates.", file = fileout)
     df_unannot_chr = get_best_contig_L50_assembly(df_unannot_chr, groupby_col = "Assembly Accession")
     print("    - {}".format(return_stats_string(df_unannot_chr)), file = fileout)
+    # We have already picked the chromosome-scale, annotated genomes (df_annot_chr).
+    # These are often the RefSeq versions of the genomes, and for those there will be a corresponding unannotated version.
+    #  We need to look in the df_annot_chr["Assembly Paired Assembly Accession"] column. If any of these are present
+    #  in the df_unannot_chr["Assembly Accession"] column, we can remove them from from df_unannot_chr since there is
+    #  already an annotated version.
+    print("  - Removing unannotated genomes that have an annotated counterpart.", file = fileout)
+    before_size = df_unannot_chr.shape[0]
+    df_unannot_chr = df_unannot_chr.loc[~df_unannot_chr["Assembly Accession"].isin(df_annot_chr["Assembly Paired Assembly Accession"])]
+    after_size = df_unannot_chr.shape[0]
+    print("    - Removed {} unannotated genomes that have an annotated counterpart.".format(before_size - after_size), file = fileout)
     df_unannot_chr["chrscale"] = True
     df_unannot_chr["annotated"] = False
     legal_True_final_group_df(df_unannot_chr)
@@ -790,17 +803,19 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
 def load_and_cleanup_NCBI_datasets_tsv_df(tsv_filepath, ignore_list) -> pd.DataFrame:
     """
     This function is responsible for cleaning the dataframe that is output by the NCBI datasets program.
-    A lot of times the fields are improperly formatted.
+    A lot of times the fields are improperly formatted within the database.
+    Sometimes there are formatting errors in how the information is stored in the NCBI database. These
+      cases should be reported on the NCBI datasets github page.
     """
     df = pd.read_csv(tsv_filepath, sep="\t", low_memory=False)
-    # strip leading and trailing whitespace from the column names because pandas can screw up sometimes
+    # strip leading and trailing whitespace from the column names because pandas can make mistakes sometimes
     df.columns = df.columns.str.strip()
 
     # Remove assemblies that are not chromosome-scale.
-    # These genomes are likely those that we manually checked and know that we don't wan't.
+    # These genomes are likely those that we manually checked and know that we do not want included
     df = remove_specific_GCAs(df, ignore_list)
 
-    # remove duplicate rows
+    # Remove duplicate rows. TODO: Note how often this happens in reality.
     df = df.drop_duplicates()
 
     # change these columns to integers. There should not be any missing values.
@@ -950,11 +965,11 @@ rule get_representative_genomes:
     Currently this does not support multiple genomes for one species.
     """
     input:
-        report_tsv = config["tool"] + "/input/{taxid}.tsv",
+        report_tsv = config["tool"] + "/input/{taxid}_{datetime}.tsv",
         assembly_ignore_list = os.path.join(snakefile_path, "data/assembly_ignore_list.txt")
     output:
-        report                 = config["tool"] + "/input/report_{taxid}.tsv",
-        representative_genomes = config["tool"] + "/input/selected_genomes_{taxid}.tsv"
+        report                 = config["tool"] + "/input/report_{taxid}_{datetime}.tsv",
+        representative_genomes = config["tool"] + "/input/selected_genomes_{taxid}_{datetime}.tsv"
     threads: 1
     resources:
         time  = 5, # 5 minutes
@@ -1007,9 +1022,9 @@ rule history_of_assemblies_filtered:
     Step backward 7 days in time until we run out of assemblies to consider.
     """
     input:
-        report_tsv = config["tool"] + "/input/{taxid}.tsv",
+        report_tsv = config["tool"] + "/input/{taxid}_{datetime}.tsv",
     output:
-        report     = config["tool"] + "/input/report_history_filtered_{taxid}.tsv",
+        report     = config["tool"] + "/input/report_history_filtered_{taxid}_{datetime}.tsv",
     threads: 1
     resources:
         time  = 5, # 5 minutes
@@ -1051,10 +1066,10 @@ rule assembly_report_plot_filtered:
     Make a pdf of the filtered dataset assembly report.
     """
     input:
-        report          = config["tool"] + "/input/report_history_filtered_{taxid}.tsv",
+        report          = config["tool"] + "/input/report_history_filtered_{taxid}_{datetime}.tsv",
         plotting_script = os.path.join(snakefile_path, "scripts/plot_NCBI_genomes_history.py")
     output:
-        pdf             = config["tool"] + "/input/report_history_filtered_{taxid}.pdf",
+        pdf             = config["tool"] + "/input/report_history_filtered_{taxid}_{datetime}.pdf",
     threads: 1
     resources:
         time  = 1, # 5 minutes
@@ -1072,9 +1087,9 @@ rule history_of_assemblies_raw:
     Step backward 7 days in time until we run out of assemblies to consider.
     """
     input:
-        report_tsv = config["tool"] + "/input/{taxid}.tsv",
+        report_tsv = config["tool"] + "/input/{taxid}_{datetime}.tsv",
     output:
-        report     = config["tool"] + "/input/report_history_raw_{taxid}.tsv",
+        report     = config["tool"] + "/input/report_history_raw_{taxid}_{datetime}.tsv",
     threads: 1
     resources:
         time  = 5, # 5 minutes
@@ -1125,10 +1140,10 @@ rule assembly_report_plot_raw:
     Make a pdf of the raw dataset assembly report.
     """
     input:
-        report          = config["tool"] + "/input/report_history_raw_{taxid}.tsv",
+        report          = config["tool"] + "/input/report_history_raw_{taxid}_{datetime}.tsv",
         plotting_script = os.path.join(snakefile_path, "scripts/plot_NCBI_genomes_history.py")
     output:
-        pdf             = config["tool"] + "/input/report_history_raw_{taxid}.pdf",
+        pdf             = config["tool"] + "/input/report_history_raw_{taxid}_{datetime}.pdf",
     threads: 1
     resources:
         time  = 1, # 5 minutes
@@ -1149,7 +1164,7 @@ checkpoint split_into_annotated_and_unannotated_and_chr_nonchr:
     Currently this does not support multiple genomes for one species.
     """
     input:
-        representative_genomes = expand(config["tool"] + "/input/selected_genomes_{taxid}.tsv", taxid = config["taxids"])
+        representative_genomes = expand(config["tool"] + "/input/selected_genomes_{taxid}_{datetime}.tsv", taxid = config["taxids"], datetime = config["datetime"])
     output:
         # DO NOT CHANGE THE ORDER OF THESE FILES. THE FUNCTION get_assemblies(wildcards) DEPENDS ON IT
         annotated_genomes_chr       =       config["tool"] + "/output/annotated_genomes_chr_{datetime}.tsv",
