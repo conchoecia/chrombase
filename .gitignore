@@ -2,3 +2,4 @@
 fasta.py
 bin/
 __pycache__/
+scripts/NCBIgff2chrom.py
