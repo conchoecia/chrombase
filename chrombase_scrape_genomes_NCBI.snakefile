@@ -13,6 +13,9 @@ PREREQUISITES:
     ncbi = NCBITaxa()
     ncbi.update_taxonomy_database()
     ```
+
+20250901 - TODO - there is a problem where sometimes assemblies appear to be annotated, but there are no clear peptide files:
+         - GCA_964026615.1 is one of those
 """
 
 # Some specific NCBI taxids cause problems with the NCBI datasets tool.

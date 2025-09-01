@@ -107,7 +107,7 @@ rule gzip_fasta_file:
     threads: 1
     group: "dlgz"
     resources:
-        mem_mb  = 1000, # 1 GB of RAM
+        mem_mb  = 1333, # 1 GB of RAM
         time    = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn]),
         runtime = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
     params:
@@ -138,9 +138,9 @@ rule dlPepGff:
         APIstring = "" if "API_key" not in locals() else "--api-key {}".format(locals()["API_key"])
     threads: 1
     resources:
-        mem_mb  = 500, # Usually only uses 100MB of RAM
-        time    = 5,  # 5 minutes.
-        runtime = 5,
+        mem_mb  = 987, # Usually only uses 100MB of RAM
+        time    = 10,  # 10 minutes.
+        runtime = 10,
         download_slots = 1
     shell:
         """
@@ -247,9 +247,9 @@ rule gzPepGff:
         pep    = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.pep.gz",
     threads: 1
     resources:
-        mem_mb  = 4000, # shouldn't take a lot of RAM.
-        time    = 5, # 5 minutes
-        runtime = 5
+        mem_mb  = 4007, # shouldn't take a lot of RAM.
+        time    = 10, # 1 minutes
+        runtime = 10
     shell:
         """
         # first gzip the chrom file
@@ -273,9 +273,9 @@ rule generate_assembled_config_entry:
         yaml   = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.yaml.part", non_empty=True),
     threads: 1
     resources:
-        mem_mb  = 1000,
-        time    = 5,
-        runtime = 5
+        mem_mb  = 1999,
+        time    = 10,
+        runtime = 10
     run:
         # load in the dataframe of the annotated genomes
         df = pd.read_csv(input.annotated_genomes, sep="\t")
@@ -359,9 +359,9 @@ rule collate_assembled_config_entries:
         yaml = ensure("NCBI_odp_db.annotated.chr.yaml", non_empty=True)
     threads: 1
     resources:
-        mem_mb  = 1000,
-        time    = 5,
-        runtime = 5
+        mem_mb  = 2003,
+        time    = 10,
+        runtime = 10
     shell:
         """
         echo "species:" > {output.yaml}
@@ -379,9 +379,9 @@ rule generate_species_list_for_timetree:
         sp_list = ensure("NCBI_odp_sp_list.annotated.chr.txt", non_empty = True)
     threads: 1
     resources:
-        mem_mb  = 1000,
-        time    = 5,
-        runtime = 5
+        mem_mb  = 2004,
+        time    = 10,
+        runtime = 10
     run:
         # open the yaml file into a dictionary
         with open(input.yaml, "r") as f:
