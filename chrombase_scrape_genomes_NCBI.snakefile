@@ -16,6 +16,7 @@ PREREQUISITES:
 
 20250901 - TODO - there is a problem where sometimes assemblies appear to be annotated, but there are no clear peptide files:
          - GCA_964026615.1 is one of those
+         - GCA_919967415.2 is another
 """
 
 # Some specific NCBI taxids cause problems with the NCBI datasets tool.
@@ -114,32 +115,18 @@ rule all:
         expand(config["tool"] + "/input/report_history_raw_{taxid}_{datetime}.pdf",
                 taxid = config["taxids"], datetime = config["datetime"]),
 
-rule install_ncbi_tools:
-    output:
-        datasets = os.path.join(bin_path, "datasets"),
-        dataformat = os.path.join(bin_path, "dataformat"),
-    threads: 1
-    resources:
-        time   = 5, # 5 minutes
-        mem_mb = 1000
-    shell:
-        """
-        python {snakefile_path}/scripts/install_ncbi_cli.py
-        """
-
 rule download_json:
-    input:
-        datasets = os.path.join(bin_path, "datasets"),
     output:
         genome_report = config["tool"] + "/input/{taxid}_{datetime}.json"
+    params:
+        datasets = os.path.join(bin_path, "datasets"),
     threads: 1
     resources:
         time   = 5, # 5 minutes
         mem_mb = 1000
     shell:
         """
-        #{input.datasets} summary genome taxon --assembly-level chromosome --as-json-lines {wildcards.taxid} > {output.genome_report}
-        {input.datasets} summary genome taxon --as-json-lines {wildcards.taxid} > {output.genome_report}
+        {params.datasets} summary genome taxon --as-json-lines {wildcards.taxid} > {output.genome_report}
         """
 
 all_fields     = ["accession",
@@ -399,19 +386,18 @@ fields_to_print = ["accession",
 rule format_json_to_tsv:
     input:
         genome_report = config["tool"] + "/input/{taxid}_{datetime}.json",
-        dataformat = os.path.join(bin_path, "dataformat")
     output:
         report_tsv = temp(config["tool"] + "/input/{taxid}_{datetime}.tsv")
     params:
         fields = ",".join(fields_to_print),
-        #fields = ",".join(all_fields)
+        dataformat = os.path.join(bin_path, "dataformat")
     threads: 1
     resources:
         time   = 5, # 5 minutes
         mem_mb = 1000
     shell:
         """
-        {input.dataformat} tsv genome --inputfile {input.genome_report} --fields {params.fields} > {output.report_tsv}
+        {params.dataformat} tsv genome --inputfile {input.genome_report} --fields {params.fields} > {output.report_tsv}
         """
 
 def append_to_list(inputlist, to_append):
@@ -1155,7 +1141,6 @@ rule assembly_report_plot_raw:
         """
         python {input.plotting_script} -i {input.report} -o {output.pdf}
         """
-
 
 # this checkpoint triggers re-evaluation of the DAG
 checkpoint split_into_annotated_and_unannotated_and_chr_nonchr:
