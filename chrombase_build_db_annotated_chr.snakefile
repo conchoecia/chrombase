@@ -4,20 +4,25 @@ This takes the list of annotated and unannotated genomes and prepares a database
 The program requires that either a directory of the annotated and unannotated genome lists be provided.
 
 Otherwise the user has to specify specific paths to those tsv files.
+
+# Use `find odp_ncbi_genome_db/ -type f -exec touch {} +` to touch all of the files
+#  in this directory after updating the pipeline to avoid re-downloading everything.
 """
 
 import pandas as pd
 from datetime import datetime
-import GenDB
 import yaml
 
-# This block imports fasta-parser as fasta
+# This block imports fasta-parser as fasta and GebDB
 import os
 import sys
 snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
 dependencies_path = os.path.join(snakefile_path, "dependencies")
 sys.path.insert(1, dependencies_path)
 import fasta
+src_path = os.path.join(snakefile_path, "src")
+sys.path.insert(1, src_path)
+import GenDB
 
 # figure out where bin is because we need to use some outside tools
 bin_path = os.path.join(snakefile_path, "bin")
@@ -25,6 +30,9 @@ bin_path = os.path.join(snakefile_path, "bin")
 configfile: "config.yaml"
 config["tool"] = "odp_ncbi_genome_db"
 config = GenDB.opening_logic_GenDB_build_db(config, chr_scale = True, annotated = True)
+
+# Print some info about the files that we found.
+GenDB.print_gendb_config_summary(config, chr_scale=True, annotated=True)
 
 wildcard_constraints:
     taxid="[0-9]+",
@@ -75,8 +83,9 @@ rule dlChrs:
     threads: 1
     group: "dlgz"
     resources:
-        mem_mb = dlChrs_get_mem_mb, # the amount of RAM needed depends on the size of the input genome. Just scale UP.
-        time   = 20,  # 20 minutes.
+        mem_mb  = dlChrs_get_mem_mb, # the amount of RAM needed depends on the size of the input genome. Just scale UP.
+        time    = 20,  # 20 minutes.
+        runtime = 20,
         download_slots = 1
     run:
         result = GenDB.download_unzip_genome(wildcards.assemAnn, params.outdir,
@@ -95,8 +104,9 @@ rule gzip_fasta_file:
     threads: 1
     group: "dlgz"
     resources:
-        mem_mb = 1000, # 1 GB of RAM
-        time   = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
+        mem_mb  = 1000, # 1 GB of RAM
+        time    = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn]),
+        runtime = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
     params:
         outdir   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/",
     shell:
@@ -125,8 +135,9 @@ rule dlPepGff:
         APIstring = "" if "API_key" not in locals() else "--api-key {}".format(locals()["API_key"])
     threads: 1
     resources:
-        mem_mb = 500, # Usually only uses 100MB of RAM
-        time   = 5,  # 5 minutes.
+        mem_mb  = 500, # Usually only uses 100MB of RAM
+        time    = 5,  # 5 minutes.
+        runtime = 5,
         download_slots = 1
     shell:
         """
@@ -195,7 +206,7 @@ rule prep_chrom_file_from_NCBI:
         genome   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz",
         protein  = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.pep",
         gff      = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.gff",
-        chromgen = os.path.join(snakefile_path, "..", "scripts", "NCBIgff2chrom.py")
+        chromgen = os.path.join(snakefile_path, "scripts", "NCBIgff2chrom.py")
     output:
         chrom  = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.chrom", non_empty=True)),
         pep    = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.pep",   non_empty=True)),
@@ -204,7 +215,8 @@ rule prep_chrom_file_from_NCBI:
     retries: 7
     resources:
         mem_mb  = prep_chrom_get_mem_mb, # shouldn't take much RAM, 231228 - I have seen mostly 200 MB or less. Sometimes it blows up to multiple GB.
-        time    = prep_chrom_get_time    # Most of these end by 5 minutes, but occassionally they take longer.
+        time    = prep_chrom_get_time,    # Most of these end by 5 minutes, but occassionally they take longer.
+        runtime = prep_chrom_get_time
     params:
         prefix  = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt"
     shell:
@@ -231,7 +243,8 @@ rule gzPepGff:
     threads: 1
     resources:
         mem_mb  = 1000, # shouldn't take a lot of RAM.
-        time    = 5 # 5 minutes
+        time    = 5, # 5 minutes
+        runtime = 5
     shell:
         """
         # first gzip the chrom file
@@ -256,7 +269,8 @@ rule generate_assembled_config_entry:
     threads: 1
     resources:
         mem_mb  = 1000,
-        time    = 5
+        time    = 5,
+        runtime = 5
     run:
         # load in the dataframe of the annotated genomes
         df = pd.read_csv(input.annotated_genomes, sep="\t")
@@ -341,7 +355,8 @@ rule collate_assembled_config_entries:
     threads: 1
     resources:
         mem_mb  = 1000,
-        time    = 5
+        time    = 5,
+        runtime = 5
     shell:
         """
         echo "species:" > {output.yaml}
@@ -360,7 +375,8 @@ rule generate_species_list_for_timetree:
     threads: 1
     resources:
         mem_mb  = 1000,
-        time    = 5
+        time    = 5,
+        runtime = 5
     run:
         # open the yaml file into a dictionary
         with open(input.yaml, "r") as f:

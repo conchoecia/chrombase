@@ -9,10 +9,11 @@ This python program contains functions that are used to download genomes from NC
     - GenDB_build_db_annotated_nonchr.snakefile
 """
 
+from io import StringIO
 import os
 import pandas as pd
-from io import StringIO
 from random import randint
+import re
 import shutil
 import subprocess
 import sys
@@ -51,6 +52,68 @@ def gzip_get_time(basepairs) -> int:
     """
     return int(7.0 * (basepairs/1e9) + 2.0)
 
+def print_gendb_config_summary(config, chr_scale=True, annotated=True, sample_n=5):
+    tsv_keys = [
+        "annotated_genome_chr_tsv",
+        "annotated_genome_nonchr_tsv",
+        "unannotated_genome_chr_tsv",
+        "unannotated_genome_nonchr_tsv",
+    ]
+
+    print("\n[GenDB] Accessions TSV paths (from config):", flush=True)
+    for k in tsv_keys:
+        v = config.get(k)
+        if v:
+            abs_v = os.path.abspath(v)
+            exists = os.path.exists(v)
+            print(f"  {k}: {abs_v}  (exists={exists})", flush=True)
+        else:
+            print(f"  {k}: MISSING", flush=True)
+
+    # Determine chosen_file using same logic as opening_logic_GenDB_build_db
+    if annotated:
+        chosen_key = "annotated_genome_chr_tsv" if chr_scale else "annotated_genome_nonchr_tsv"
+    else:
+        chosen_key = "unannotated_genome_chr_tsv" if chr_scale else "unannotated_genome_nonchr_tsv"
+
+    chosen_file = config.get(chosen_key)
+    print("", flush=True)
+    if chosen_file:
+        print(f"[GenDB] chosen_file key: {chosen_key}", flush=True)
+        print(f"[GenDB] chosen_file path: {os.path.abspath(chosen_file)}  (exists={os.path.exists(chosen_file)})", flush=True)
+    else:
+        print(f"[GenDB][WARN] No chosen_file found in config for key: {chosen_key}", flush=True)
+
+    # Summary of assemblies and scaffold-length mapping from config
+    assem_list = config.get("assemAnn")
+    scaflen_map = config.get("assemAnn_to_scaflen")
+
+    if assem_list is None:
+        print("[GenDB][WARN] config['assemAnn'] is missing or None", flush=True)
+    else:
+        print(f"[GenDB] Total assemblies (assemAnn): {len(assem_list)}", flush=True)
+        if len(assem_list) > 0:
+            print(f"[GenDB] First {min(sample_n, len(assem_list))} assembly accessions: {assem_list[:sample_n]}", flush=True)
+
+    if scaflen_map is None:
+        print("[GenDB][WARN] config['assemAnn_to_scaflen'] is missing or None", flush=True)
+    else:
+        # Show a few sample mappings
+        items = list(scaflen_map.items())
+        print(f"[GenDB] Total assembly->scaflen entries: {len(items)}", flush=True)
+        if items:
+            print(f"[GenDB] Sample assembly->scaflen mappings (first {min(sample_n, len(items))}):", flush=True)
+            for asm, slen in items[:sample_n]:
+                print(f"    {asm} -> {slen}", flush=True)
+
+    # Optional integrity checks
+    if assem_list is not None and scaflen_map is not None:
+        missing_in_map = [a for a in assem_list if a not in scaflen_map]
+        if missing_in_map:
+            print(f"[GenDB][WARN] {len(missing_in_map)} assembly accessions present in 'assemAnn' but missing from 'assemAnn_to_scaflen' (showing up to 5): {missing_in_map[:5]}", flush=True)
+    print("", flush=True)
+
+
 def opening_logic_GenDB_build_db(config, chr_scale = None, annotated = None):
     """
     This is common logic for all of the GenDB_build_db_*.snakefile scripts.
@@ -58,6 +121,8 @@ def opening_logic_GenDB_build_db(config, chr_scale = None, annotated = None):
 
     Takes the config object as input, and returns it modified.
     The user must provide boolean values (True, False) for chr_scale and annotated.
+
+    Opens a directory containing the accesstion tsv files, finds the latest accessions.
     """
     # Do some logic to see if the user has procided enough information for us to analyse the genomes
     if ("directory" not in config) and ("accession_tsvs" not in config):
@@ -580,66 +645,93 @@ def download_unzip_genome(assembly_accession, output_dir, datasetsEx,
 
 def contains_date(string_to_check):
     """
-    From the string in question, just see if it contains a date in the format YYYYMMDDHHMM
+    From the string in question, just see if it contains a date in the format YYYYMMDDHHMM or YYYYMMDD
     """
     # split the string on the underscore
     split_string = string_to_check.replace(".tsv","").split("_")
     # check if any of the elements are a date
     string_contains_date = False
     for element in split_string:
-        if element.isdigit() and len(element) == 12:
+        if element.isdigit() and (len(element) == 12 or len(element) == 8):
+            # check that the years, months, days are legal
+            if not int(element[0:4]) > 1990:
+                raise IOError("The year in the date is not legal. {}".format(string_to_check))
+            if not (int(element[4:6]) >= 1 and int(element[4:6]) <= 12):
+                raise IOError("The month in the date is not legal. {}".format(string_to_check))
+            if not (int(element[6:8]) >= 1 and int(element[6:8]) <= 31):
+                raise IOError("The day in the date is not legal. {}".format(string_to_check))
             string_contains_date = True
     return string_contains_date
 
+def _best_date_key_from_name(name: str):
+    """
+    Extract the latest date-like token from the filename and convert to a sortable key.
+    Supports YYYYMMDD (8) and YYYYMMDDHHMM (12). For 8-digit dates, assume 23:59 so
+    they correctly sort after any same-day times.
+    Returns a tuple (YYYY, MM, DD, HH, MM) or None if no date is found.
+    """
+    tokens = re.findall(r'(?<!\d)((?:19|20)\d{6}(?:\d{4})?)(?!\d)', name)
+    best = None
+    for t in tokens:
+        if len(t) == 12:  # YYYYMMDDHHMM
+            key = (int(t[0:4]), int(t[4:6]), int(t[6:8]), int(t[8:10]), int(t[10:12]))
+        elif len(t) == 8:  # YYYYMMDD
+            key = (int(t[0:4]), int(t[4:6]), int(t[6:8]), 23, 59)
+        else:
+            continue
+        if best is None or key > best:
+            best = key
+    return best
+
 def return_latest_accession_tsvs(directory_path):
     """
-    Given a directory, we have to do some parsing of the file names to figure out what is the most recent accession tsv file.
-
-    Returns the full path to the most recent annotated and unannotated accession TSV files.
+    Return full paths to the most recent annotated/unannotated, chr/nonchr TSVs.
+    - Files are detected by flexible name checks (e.g., 'annotated_chr', 'unannotated_nonchr').
+    - Presence of a date is required (via contains_date(f)).
+    - Recency is determined by the latest date token found in the filename.
     """
-    # check that the directory exists
     if not os.path.isdir(directory_path):
-        raise IOerror("The directory of TSV files you provided does not exist. {}".format(directory_path))
-    # get a list of files in this directory that start with ["annotated", "unannotated"]
-    files = os.listdir(directory_path)
-    annotated_chr_files      = [f for f in files if f.startswith("annotated_genomes_chr")      and f.endswith(".tsv") and contains_date(f)]
-    annotated_nonchr_files   = [f for f in files if f.startswith("annotated_genomes_nonchr")   and f.endswith(".tsv") and contains_date(f)]
-    unannotated_chr_files    = [f for f in files if f.startswith("unannotated_genomes_chr")    and f.endswith(".tsv") and contains_date(f)]
-    unannotated_nonchr_files = [f for f in files if f.startswith("unannotated_genomes_nonchr") and f.endswith(".tsv") and contains_date(f)]
+        raise IOError(f"The directory of TSV files you provided does not exist. {directory_path}")
 
-    # It is fine if the files are empty, but there needs to at least be a file to look at
-    cycledict = {"annotated_chr_files":      annotated_chr_files,
-                    "annotated_nonchr_files":   annotated_nonchr_files,
-                    "unannotated_chr_files":    unannotated_chr_files,
-                    "unannotated_nonchr_files": unannotated_nonchr_files}
-    for thiskey in cycledict:
-        if len(cycledict[thiskey]) == 0:
-            outmsg = "There are no accession TSV files for this filetype: {}".format(thiskey)
-            outmsg = outmsg + "\nThe directory in which I looked was: {}".format(directory_path)
-            outmsg = outmsg + "\n  - The files that we found in the directory are:"
-            for thisfile in os.listdir(directory_path):
-                outmsg = outmsg + "\n    - {}".format(thisfile)
-            outmsg = outmsg + "\nThe names of the files that we need to find are found like so:"
-            outmsg = outmsg + "\n    [f for f in files if f.startswith(\"annotated_genomes_chr\")      and f.endswith(\".tsv\") and contains_date(f)]"
-            outmsg = outmsg + "\n    [f for f in files if f.startswith(\"annotated_genomes_nonchr\")   and f.endswith(\".tsv\") and contains_date(f)]"
-            outmsg = outmsg + "\n    [f for f in files if f.startswith(\"unannotated_genomes_chr\")    and f.endswith(\".tsv\") and contains_date(f)]"
-            outmsg = outmsg + "\n    [f for f in files if f.startswith(\"unannotated_genomes_nonchr\") and f.endswith(\".tsv\") and contains_date(f)]"
-            outmsg = outmsg + "\nIt is fine if the files are empty, but there needs to at least be a file to look at."
-            warnings.warn(outmsg) # using a warning for now, as it is not a fatal error. In case something is missing, this will just not run.
+    files = [f for f in os.listdir(directory_path) if f.endswith(".tsv")]
 
-    # sort the files by date, using YYYYMMDDHHMM as the sorting key
-    annotated_chr_files.sort(        key=lambda x: int(x.split("_")[-1].split(".")[0]), reverse=True)
-    annotated_nonchr_files.sort(     key=lambda x: int(x.split("_")[-1].split(".")[0]), reverse=True)
-    unannotated_chr_files.sort(      key=lambda x: int(x.split("_")[-1].split(".")[0]), reverse=True)
-    unannotated_nonchr_files.sort(   key=lambda x: int(x.split("_")[-1].split(".")[0]), reverse=True)
-    # get the most recent annotated file
-    most_recent_annotated_chr_file      = annotated_chr_files[0] if len(annotated_chr_files) > 0 else "None.txt"
-    most_recent_annotated_nonchr_file   = annotated_nonchr_files[0] if len(annotated_nonchr_files) > 0 else "None.txt"
-    most_recent_unannotated_chr_file    = unannotated_chr_files[0]  if len(unannotated_chr_files) > 0 else "None.txt"
-    most_recent_unannotated_nonchr_file = unannotated_nonchr_files[0]  if len(unannotated_nonchr_files) > 0 else "None.txt"
-    return_dict = {"annotated_chr":      os.path.join(directory_path, most_recent_annotated_chr_file),
-                   "annotated_nonchr":   os.path.join(directory_path, most_recent_annotated_nonchr_file),
-                   "unannotated_chr":    os.path.join(directory_path, most_recent_unannotated_chr_file),
-                   "unannotated_nonchr": os.path.join(directory_path, most_recent_unannotated_nonchr_file)
-                   }
-    return return_dict
+    # Category filters (robust to extra suffixes like _fewerColumns, etc.)
+    annotated_chr_files      = [f for f in files if f.startswith("annotated_")   and "_chr_"    in f and contains_date(f)]
+    annotated_nonchr_files   = [f for f in files if f.startswith("annotated_")   and "_nonchr_" in f and contains_date(f)]
+    unannotated_chr_files    = [f for f in files if f.startswith("unannotated_") and "_chr_"    in f and contains_date(f)]
+    unannotated_nonchr_files = [f for f in files if f.startswith("unannotated_") and "_nonchr_" in f and contains_date(f)]
+
+    cycledict = {
+        "annotated_chr_files":      annotated_chr_files,
+        "annotated_nonchr_files":   annotated_nonchr_files,
+        "unannotated_chr_files":    unannotated_chr_files,
+        "unannotated_nonchr_files": unannotated_nonchr_files,
+    }
+
+    # Warn (non-fatal) if a category is missing
+    for label, flist in cycledict.items():
+        if not flist:
+            warnings.warn(f"There are no accession TSV files for this filetype: {label}\n"
+                          f"Directory checked: {directory_path}")
+
+    # Sort by latest embedded date key, newest first
+    def sort_key(fname):
+        key = _best_date_key_from_name(fname)
+        # Put files without a parsable key at the very beginning (then reversed -> end)
+        return key if key is not None else (0, 0, 0, 0, 0)
+
+    for key in cycledict:
+        cycledict[key].sort(key=sort_key, reverse=True)
+
+    # Pick most recent or None
+    most_recent_annotated_chr_file      = cycledict["annotated_chr_files"][0]      if cycledict["annotated_chr_files"]      else None
+    most_recent_annotated_nonchr_file   = cycledict["annotated_nonchr_files"][0]   if cycledict["annotated_nonchr_files"]   else None
+    most_recent_unannotated_chr_file    = cycledict["unannotated_chr_files"][0]    if cycledict["unannotated_chr_files"]    else None
+    most_recent_unannotated_nonchr_file = cycledict["unannotated_nonchr_files"][0] if cycledict["unannotated_nonchr_files"] else None
+
+    return {
+        "annotated_chr":      os.path.join(directory_path, most_recent_annotated_chr_file)      if most_recent_annotated_chr_file      else None,
+        "annotated_nonchr":   os.path.join(directory_path, most_recent_annotated_nonchr_file)   if most_recent_annotated_nonchr_file   else None,
+        "unannotated_chr":    os.path.join(directory_path, most_recent_unannotated_chr_file)    if most_recent_unannotated_chr_file    else None,
+        "unannotated_nonchr": os.path.join(directory_path, most_recent_unannotated_nonchr_file) if most_recent_unannotated_nonchr_file else None,
+    }
