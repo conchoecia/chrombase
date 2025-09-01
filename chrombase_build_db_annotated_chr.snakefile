@@ -53,9 +53,9 @@ def dlChrs_get_mem_mb(wildcards, attempt):
     """
     The amount of RAM needed for the script depends on the size of the input genome.
     """
-    attemptdict = {1: 4000,
-                   2: 16000,
-                   3: 64000
+    attemptdict = {1: 4002,
+                   2: 16002,
+                   3: 64002
                   }
     return attemptdict[attempt]
 
@@ -172,14 +172,14 @@ def prep_chrom_get_mem_mb(wildcards, attempt):
     """
     The amount of RAM needed for the script depends on the size of the input genome, the number of proteins, and the gff size.
     """
-    attemptdict = {1: 4000,
-                   2: 8000,
-                   3: 16000,
-                   4: 32000,
-                   5: 64000,
-                   6: 128000,
-                   7: 256000,
-                   8: 512000}
+    attemptdict = {1: 4001,
+                   2: 8001,
+                   3: 16001,
+                   4: 32001,
+                   5: 64001,
+                   6: 128001,
+                   7: 256001,
+                   8: 512001}
     return attemptdict[attempt]
 
 def prep_chrom_get_time(wildcards, attempt):
@@ -242,7 +242,7 @@ rule gzPepGff:
         pep    = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.pep.gz",
     threads: 1
     resources:
-        mem_mb  = 1000, # shouldn't take a lot of RAM.
+        mem_mb  = 4000, # shouldn't take a lot of RAM.
         time    = 5, # 5 minutes
         runtime = 5
     shell:
