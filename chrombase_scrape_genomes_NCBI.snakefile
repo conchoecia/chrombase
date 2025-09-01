@@ -15,6 +15,7 @@ PREREQUISITES:
     ```
 
 20250901 - TODO - there is a problem where sometimes assemblies appear to be annotated, but there are no clear peptide files:
+         - This needs to be edited in this file. The whole process of deciding what is annotated would be helpful.
          - GCA_964026615.1 is one of those
          - GCA_919967415.2 is another
 """
