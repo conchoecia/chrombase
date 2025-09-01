@@ -17,6 +17,9 @@ Description:
 
 Usage instructions:
   - There are currently no usage instructions. This is a work in progress.
+
+Updates:
+  - August 2025 - updates for chrombase
 """
 
 # This block imports fasta-parser as fasta
@@ -27,20 +30,25 @@ dependencies_path = os.path.join(snakefile_path, "../dependencies")
 sys.path.insert(1, dependencies_path)
 import fasta
 
+src_path = os.path.join(snakefile_path, "../src")
+sys.path.insert(1, src_path)
+import GenDB
+
 import pandas as pd
 from datetime import datetime
-import GenDB
 import yaml
 
 # figure out where bin is because we need to use some outside tools
-snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
 bin_path = os.path.join(snakefile_path, "../bin")
 
+# 20250901 - TODO not sure why this is commented out
 #if "API_key" not in locals():
 #    API_key = ""
 
 configfile: "config.yaml"
+
 config["tool"] = "odp_ncbi_genome_db"
+
 # Do some logic to see if the user has procided enough information for us to analyse the genomes
 if ("directory" not in config) and ("accession_tsvs" not in config):
     raise IOError("You must provide either a directory of the annotated and unannotated genome lists, or a list of the paths to those tsv files. Read the config file.")
@@ -48,13 +56,21 @@ if ("directory" not in config) and ("accession_tsvs" not in config):
 config["tempdir"] = "/tmp"
 # check that the tempdir exists
 if "tempdir" not in config:
-    raise IOError("You must provide a temporary directory to store temporary files. Read the config file.")
-# strip all trailing slashes from the tempdir
+    raise IOError("You must provide a temporary directory to store temporary files. Read the config file for instructions.")
+
+# Strip all trailing slashes from the tempdir
+#  20250901 NOTE - I'm not sure why this is here, maybe in case the tempdir has space characters?
+#                  This seems like rule written for some specific change originally.
 config["temp"] = config["tempdir"].rstrip("/").rstrip("\\")
 if not os.path.isdir(config["tempdir"]):
     raise IOError("The temporary directory you provided does not exist. {}".format(config["tempdir"]))
 
 config = GenDB.opening_logic_GenDB_build_db(config, chr_scale = True, annotated = False)
+# Print some info about the files that we found.
+printed = False
+if not printed:
+    GenDB.print_gendb_config_summary(config, chr_scale=True, annotated=True)
+    printed = True
 
 # One key feature of this script is that we will map proteins from
 #  LG databases to annotate those genomes with the LG identities.

@@ -1,9 +1,9 @@
 FASTAPY_URL = https://raw.githubusercontent.com/aziele/fastapy/main/fastapy.py
 
+.PHONY: ncbi-tools clean
+.ONESHELL:
 
-.PHONY: all fasta ncbi-tools clean gff2chrom
-
-all: fasta ncbi-tools gff2chrom
+all: fasta ncbi-tools
 
 fasta:
 	mkdir -p dependencies

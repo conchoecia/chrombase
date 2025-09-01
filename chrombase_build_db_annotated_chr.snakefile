@@ -32,7 +32,10 @@ config["tool"] = "odp_ncbi_genome_db"
 config = GenDB.opening_logic_GenDB_build_db(config, chr_scale = True, annotated = True)
 
 # Print some info about the files that we found.
-GenDB.print_gendb_config_summary(config, chr_scale=True, annotated=True)
+printed = False
+if not printed:
+    GenDB.print_gendb_config_summary(config, chr_scale=True, annotated=True)
+    printed = True
 
 wildcard_constraints:
     taxid="[0-9]+",
@@ -72,13 +75,13 @@ rule dlChrs:
         Therefore, we do not need additional verification steps for the assembly file.
     """
     input:
-        datasets = os.path.join(bin_path, "datasets")
     output:
        fasta   = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta", non_empty=True)),
        allscaf = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.all.tsv", non_empty=True),
        chrscaf = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.chr.tsv", non_empty=True)
     retries: 3
     params:
+        datasets = os.path.join(bin_path, "datasets"),
         outdir   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/",
     threads: 1
     group: "dlgz"
@@ -89,7 +92,7 @@ rule dlChrs:
         download_slots = 1
     run:
         result = GenDB.download_unzip_genome(wildcards.assemAnn, params.outdir,
-                                             input.datasets, chrscale = True)
+                                             params.datasets, chrscale = True)
         if result != 0:
             raise ValueError("The download of the genome {} failed.".format(wildcards.assemAnn))
 
@@ -123,7 +126,6 @@ rule dlPepGff:
     Same structure as the previous download task.
     """
     input:
-        datasets = os.path.join(bin_path, "datasets")
     output:
         readme   = temp(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/pepDl/README.md"),
         assembly = temp(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/pepDl/{assemAnn}.pepAndGff.zip"),
@@ -131,6 +133,7 @@ rule dlPepGff:
         gff      = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.gff", non_empty=True))
     retries: 3
     params:
+        datasets = os.path.join(bin_path, "datasets"),
         outdir   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/pepDl/",
         APIstring = "" if "API_key" not in locals() else "--api-key {}".format(locals()["API_key"])
     threads: 1
@@ -150,7 +153,7 @@ rule dlPepGff:
         # Function to download the file
         RETURNHERE=$(pwd)
         cd {params.outdir}
-        {input.datasets} download genome accession {wildcards.assemAnn} \
+        {params.datasets} download genome accession {wildcards.assemAnn} \
             {params.APIstring} \
             --include protein,gff3,gtf \
             --filename {wildcards.assemAnn}.pepAndGff.zip || true
@@ -166,6 +169,8 @@ rule dlPepGff:
         find {params.outdir} -name "*.gff" -exec mv {{}} {output.gff} \\;
         # remove the gtf file if it exists
         find {params.outdir} -name "*.gtf" -exec rm {{}} \\;
+
+        # check if the output protein file exists
         """
 
 def prep_chrom_get_mem_mb(wildcards, attempt):
@@ -205,8 +210,7 @@ rule prep_chrom_file_from_NCBI:
     input:
         genome   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz",
         protein  = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.pep",
-        gff      = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.gff",
-        chromgen = os.path.join(snakefile_path, "scripts", "NCBIgff2chrom.py")
+        gff      = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.gff"
     output:
         chrom  = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.chrom", non_empty=True)),
         pep    = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.pep",   non_empty=True)),
@@ -218,11 +222,12 @@ rule prep_chrom_file_from_NCBI:
         time    = prep_chrom_get_time,    # Most of these end by 5 minutes, but occassionally they take longer.
         runtime = prep_chrom_get_time
     params:
+        chromgen = os.path.join(snakefile_path, "scripts", "NCBIgff2chrom.py"),
         prefix  = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt"
     shell:
         """
         rm -f {output.chrom} {output.pep} {output.report} 2>/dev/null
-        python {input.chromgen} \
+        python {params.chromgen} \
             -f {input.genome} \
             -p {input.protein} \
             -g {input.gff} \
