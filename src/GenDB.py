@@ -49,8 +49,13 @@ def gzip_get_time(basepairs) -> int:
        time = 7.0 * (basepairs/1e9) + 2.0
 
     Returns an int, because SLURM only takes ints for runtime.
+
+    UPDATES:
+      - 20250902 - This wasn't enough time for some genomes that were around 2Gbp. Upping this to 10 minutes per Gbp. Previously was 7.
     """
-    return int(7.0 * (basepairs/1e9) + 2.0)
+    #return int(7.0 * (basepairs/1e9) + 2.0)
+    return int(10.0 * (basepairs/1e9) + 2.0)
+
 
 def print_gendb_config_summary(config, chr_scale=True, annotated=True, sample_n=5):
     tsv_keys = [
