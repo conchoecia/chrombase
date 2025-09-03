@@ -3,6 +3,12 @@ Date - 20250902
 This file contains the functions used in the snakemake pipeline `chrombase_scrape_genomes_NCBI.snakefile`
 """
 
+from datetime import datetime
+import numpy as np
+import pandas as pd
+import sys
+import itertools
+
 all_fields     = ["accession",
                   "ani-best-ani-match-ani",
                   "ani-best-ani-match-assembly",
@@ -503,7 +509,7 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
     print("", file = fileout)
     print("*** GETTING THE CHR-SCALE, ANNOTATED ASSEMBLIES ***", file = fileout)
     # First we get the assemblies that have annotations and are chromosome-scale
-    df_annot_chr = df.loc[df["Annotation Release Date"].notna()]
+    df_annot_chr = df.loc[df["is_annotated"] == 1]
     df_annot_chr = df_annot_chr.loc[df_annot_chr["Assembly Level"] == "Chromosome"]
     print("  - Getting the genomes that are annotated and chromosome-scale", file = fileout)
     print("    - {}".format(return_stats_string(df_annot_chr)), file = fileout)
@@ -523,7 +529,8 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
     print("", file = fileout)
     print("*** GETTING THE CHR-SCALE, unANNOTATED ASSEMBLIES ***", file = fileout)
     # first we get the assemblies that have no annotations and are chromosome-scale
-    df_unannot_chr = df.loc[~df["Annotation Release Date"].notna()]
+    # use the "is_annotated" column. 0 means unannotated
+    df_unannot_chr = df.loc[df["is_annotated"] == 0]
     df_unannot_chr = df_unannot_chr.loc[df_unannot_chr["Assembly Level"] == "Chromosome"]
     print("  - Getting the genomes that are unannotated and chromosome-scale", file = fileout)
     print("    - {}".format(return_stats_string(df_unannot_chr)), file = fileout)
@@ -559,7 +566,7 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
     print("*** GETTING THE non-CHR-SCALE, ANNOTATED ASSEMBLIES ***", file = fileout)
     # first we get the assemblies that have annotations and are not chromosome-scale
     print("  - Getting the genomes that are annotated and not chromosome-scale", file = fileout)
-    df_annot_nonchr = df.loc[df["Annotation Release Date"].notna()]
+    df_annot_nonchr = df.loc[df["is_annotated"] == 1]
     df_annot_nonchr = df_annot_nonchr.loc[df_annot_nonchr["Assembly Level"] != "Chromosome"]
     print("    - {}".format(return_stats_string(df_annot_nonchr)), file = fileout)
     # Now we remove genomes of species that have already been found in the chromosome-scale datasets.
@@ -588,12 +595,11 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
     df_annot_nonchr["annotated"] = True
     legal_True_final_group_df(df_annot_nonchr)
 
-
     print("", file = fileout)
     print("*** GETTING THE non-CHR-SCALE, nonANNOTATED ASSEMBLIES ***", file = fileout)
     # first we get the assemblies that do not annotations and are not chromosome-scale
     print("  - Getting the genomes that are unannotated and not chromosome-scale", file = fileout)
-    df_unannot_nonchr = df.loc[~df["Annotation Release Date"].notna()]
+    df_unannot_nonchr = df.loc[df["is_annotated"] == 0]
     df_unannot_nonchr = df_unannot_nonchr.loc[df_unannot_nonchr["Assembly Level"] != "Chromosome"]
     print("    - {}".format(return_stats_string(df_unannot_nonchr)), file = fileout)
     # Now we remove genomes of species that have already been found in the chromosome-scale datasets.
@@ -650,7 +656,7 @@ def load_and_cleanup_NCBI_datasets_tsv_df(tsv_filepath, ignore_list) -> pd.DataF
                              "Assembly Stats Number of Contigs",
                              "Assembly Stats Total Sequence Length",
                              "Assembly Stats Total Ungapped Length",
-                             "Organism Taxonomic ID",
+                             "Organism Taxonomic ID"
                             ]
     for thiscol in cols_to_change_to_int:
         # check that the column exists, if not, tell the user
