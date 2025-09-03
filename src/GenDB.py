@@ -105,9 +105,10 @@ def gzip_get_time(basepairs) -> int:
 
     UPDATES:
       - 20250902 - This wasn't enough time for some genomes that were around 2Gbp. Upping this to 10 minutes per Gbp. Previously was 7.
+      - 20250902 - This cut it close for a 6Gbp genome, so up this to 12 minutes per Gcp
     """
     #return int(7.0 * (basepairs/1e9) + 2.0)
-    return int(10.0 * (basepairs/1e9) + 2.0)
+    return int(12.0 * (basepairs/1e9) + 2.0)
 
 
 def print_gendb_config_summary(config, chr_scale=True, annotated=True, sample_n=5):
