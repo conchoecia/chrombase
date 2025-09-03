@@ -39,6 +39,59 @@ def create_directories_recursive_notouch(path):
         if not os.path.exists(current_path):
             os.mkdir(current_path)
 
+def dlChrs_get_mem_mb(wildcards, attempt):
+    """
+    The amount of RAM needed for the script depends on the size of the input genome.
+    """
+    attemptdict = {1: 4002,
+                   2: 16002,
+                   3: 64002
+                  }
+    return attemptdict[attempt]
+
+def miniprot_get_mem_mb(wildcards, attempt):
+    """
+    The amount of RAM needed for miniprot is highly variable.
+    """
+    attemptdict = {1: 16000,
+                   2: 32000,
+                   3: 64000,
+                   4: 128000,
+                   5: 256000,
+                   6: 512000,
+                   7: 1024000,
+                   8: 1536000}
+    return attemptdict[attempt]
+
+def prep_chrom_get_mem_mb(wildcards, attempt):
+    """
+    The amount of RAM needed for the script depends on the size of the input genome, the number of proteins, and the gff size.
+    """
+    attemptdict = {1: 4001,
+                   2: 8001,
+                   3: 16001,
+                   4: 32001,
+                   5: 64001,
+                   6: 128001,
+                   7: 256001,
+                   8: 512001}
+    return attemptdict[attempt]
+
+def prep_chrom_get_time(wildcards, attempt):
+    """
+    The amount of minutes needed varies depending on the input size.
+    """
+    attemptdict = {1: 16,
+                   2: 32,
+                   3: 64,
+                   4: 128,
+                   5: 256,
+                   6: 512,
+                   7: 1024,
+                   8: 2048}
+    return attemptdict[attempt]
+
+
 def gzip_get_time(basepairs) -> int:
     """
     This function returns how many minutes of compute time a gzip job on a fasta file will take.

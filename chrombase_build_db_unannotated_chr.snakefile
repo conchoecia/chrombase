@@ -30,16 +30,16 @@ import yaml
 import os
 import sys
 snakefile_path = os.path.dirname(os.path.realpath(workflow.snakefile))
-dependencies_path = os.path.join(snakefile_path, "../dependencies")
+dependencies_path = os.path.join(snakefile_path, "dependencies")
 sys.path.insert(1, dependencies_path)
 import fasta
 
-src_path = os.path.join(snakefile_path, "../src")
+src_path = os.path.join(snakefile_path, "src")
 sys.path.insert(1, src_path)
 import GenDB
 
 # figure out where bin is because we need to use some outside tools
-bin_path = os.path.join(snakefile_path, "../bin")
+bin_path = os.path.join(snakefile_path, "bin")
 
 configfile: "config.yaml"
 config["tool"] = "odp_ncbi_genome_db"
@@ -128,16 +128,6 @@ rule all:
         expand("NCBI_odp_sp_list.unannotated.{LG_name}.txt",
                LG_name=LG_to_db_directory_dict.keys()),
 
-def dlChrs_get_mem_mb(wildcards, attempt):
-    """
-    The amount of RAM needed for the script depends on the size of the input genome.
-    """
-    attemptdict = {1: 4000,
-                   2: 16000,
-                   3: 64000
-                  }
-    return attemptdict[attempt]
-
 rule dlChrs:
     """
     We have selected the unannotated genomes to download.
@@ -151,24 +141,24 @@ rule dlChrs:
         This verifies that the files are downloaded and unzipped correctly, and contain all of the expected sequences.
         Therefore, we do not need additional verification steps for the assembly file.
     """
-    input:
-        datasets = os.path.join(bin_path, "datasets")
     output:
        fasta   = temp(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta"),
        allscaf = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.all.tsv",
        chrscaf = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.chr.tsv"
     retries: 3
     params:
+        datasets = os.path.join(bin_path, "datasets"),
         outdir   = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/",
     threads: 1
     group: "dlgz"
     resources:
-        mem_mb = dlChrs_get_mem_mb, # 1 GB of RAM
+        mem_mb = GenDB.dlChrs_get_mem_mb, # 1 GB of RAM
         time   = 20,  # 20 minutes.
+        runtime = 20,
         download_slots = 1
     run:
         result = GenDB.download_unzip_genome(wildcards.assemAnn, params.outdir,
-                                             input.datasets, chrscale = True)
+                                             params.datasets, chrscale = True)
         if result != 0:
             raise ValueError("The download of the genome {} failed.".format(wildcards.assemAnn))
 
@@ -183,8 +173,9 @@ rule gzip_fasta_file:
     threads: 1
     group: "dlgz"
     resources:
-        mem_mb = 1000, # 1 GB of RAM
-        time   = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
+        mem_mb  = 1000, # 1 GB of RAM
+        time    = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn]),
+        runtime = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
     shell:
         """
         echo "Gzipping the fasta file."
@@ -201,28 +192,15 @@ rule generate_LG_fasta_sequence:
     output:
         fasta = config["tool"] + "/input/LG_proteins/{LG_name}.fasta"
     resources:
-        mem_mb = 1000, # 1 GB of RAM
-        time   = 5     # 5 minutes
+        mem_mb  = 1000, # 1 GB of RAM
+        time    = 5,     # 5 minutes
+        runtime = 5
     threads: 1
     run:
         with open(output.fasta, "w") as o:
             for fastafile in os.listdir(input.LG_dir + "/aligned"):
                 for record in fasta.parse(input.LG_dir + "/aligned/" + fastafile):
                     o.write(">{}\n{}\n".format(record.id, record.seq.replace("-", "")))
-
-def miniprot_get_mem_mb(wildcards, attempt):
-    """
-    The amount of RAM needed for miniprot is highly variable.
-    """
-    attemptdict = {1: 16000,
-                   2: 32000,
-                   3: 64000,
-                   4: 128000,
-                   5: 256000,
-                   6: 512000,
-                   7: 1024000,
-                   8: 1536000}
-    return attemptdict[attempt]
 
 rule miniprot:
     """
@@ -239,9 +217,10 @@ rule miniprot:
     params:
         mpi_suffix = "{LG_name}_{assemAnn}.filt.fasta.gz.mpi" # this is the temporary index file
     resources:
-        tmpdir = config["tempdir"], # the place where the temporary index file will be stored
-        mem_mb = miniprot_get_mem_mb, # The RAM usage can blow up during indexing. Often > 10GB. 6Gbp genomes need more than 20GB of RAM.
-        time   = 60 # 20 minutes
+        tmpdir  = config["tempdir"], # the place where the temporary index file will be stored
+        mem_mb  = GenDB.miniprot_get_mem_mb, # The RAM usage can blow up during indexing. Often > 10GB. 6Gbp genomes need more than 20GB of RAM.
+        time    = 60,
+        runtime = 60
     shell:
         """
         INDEXFILE=$TMPDIR/{params.mpi_suffix}
@@ -276,8 +255,9 @@ rule filter_paf_for_longer_scaffold:
         paf = config["tool"] + "/output/mapped_reads/{assemAnn}/{LG_name}_to_{assemAnn}.filt.paf"
     threads: 1
     resources:
-        mem_mb = 100, # I can't forsee using a GB of RAM, but easy to request.
-        time   = 1    # Just 10 minutes
+        mem_mb  = 1000,
+        time    = 1, # Just 10 minutes
+        runtime = 1
     run:
         paf_colnames = ["query",  "qlen", "qstart", "qend", "strand",
                          "target", "tlen", "tstart", "tend", "matches",
@@ -326,8 +306,9 @@ rule paf_to_chrom_and_pep:
         pep   = temp(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.pep")
     threads: 1
     resources:
-        mem_mb = 500, # I can't forsee using a GB of RAM, but easy to request.
-        time   = 5    # Just 5 minutes
+        mem_mb  = 1000,
+        time    = 5,   # Just 5 minutes
+        runtime = 5
     run:
         paf_colnames = ["query",  "qlen", "qstart", "qend", "strand",
                          "target", "tlen", "tstart", "tend", "matches",
@@ -370,7 +351,8 @@ rule gzChrom:
     threads: 1
     resources:
         mem_mb  = 1000, # shouldn't take a lot of RAM.
-        time    = 5 # 5 minutes
+        time    = 5, # 5 minutes
+        runtime = 5
     shell:
         """
         # first gzip the chrom file
@@ -385,7 +367,6 @@ rule generate_assembled_config_entry:
     These will be gathered and concatenated later.
     """
     input:
-        unannot_genomes = config["unannotated_genome_chr_tsv"],
         genome          = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz",
         protein = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.pep.gz",
         chrom   = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.chrom.gz"
@@ -394,10 +375,13 @@ rule generate_assembled_config_entry:
     threads: 1
     resources:
         time    = 5,
+        runtime = 5,
         mem_mb  = 1000
+    params:
+        unannot_genomes = config["unannotated_genome_chr_tsv"],
     run:
         # load in the dataframe of the annotated genomes
-        df = pd.read_csv(input.unannot_genomes, sep="\t")
+        df = pd.read_csv(params.unannot_genomes, sep="\t")
         # strip leading and trailing whitespace from the column names because pandas can screw up sometimes
         df.columns = df.columns.str.strip()
 
@@ -475,7 +459,8 @@ rule collate_assembled_config_entries:
     threads: 1
     resources:
         mem_mb  = 1000,
-        time    = 5
+        time    = 5,
+        runtime = 5
     shell:
         """
         echo "species:" > {output.yaml}
@@ -494,6 +479,7 @@ rule generate_species_list_for_timetree:
     threads: 1
     resources:
         time    = 5, # 5 minutes
+        runtime = 5,
         mem_mb  = 1000
     run:
         # open the yaml file into a dictionary

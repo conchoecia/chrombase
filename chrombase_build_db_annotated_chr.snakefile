@@ -40,6 +40,11 @@ bin_path = os.path.join(snakefile_path, "bin")
 
 configfile: "config.yaml"
 config["tool"] = "odp_ncbi_genome_db"
+
+# Do some logic to see if the user has procided enough information for us to analyse the genomes
+if ("directory" not in config) and ("accession_tsvs" not in config):
+    raise IOError("You must provide either a directory of the annotated and unannotated genome lists, or a list of the paths to those tsv files. Read the config file.")
+
 config = GenDB.opening_logic_GenDB_build_db(config, chr_scale = True, annotated = True)
 
 # Print some info about the files that we found.
@@ -63,16 +68,6 @@ rule all:
         "NCBI_odp_db.annotated.chr.yaml",
         "NCBI_odp_sp_list.annotated.chr.txt"
 
-def dlChrs_get_mem_mb(wildcards, attempt):
-    """
-    The amount of RAM needed for the script depends on the size of the input genome.
-    """
-    attemptdict = {1: 4002,
-                   2: 16002,
-                   3: 64002
-                  }
-    return attemptdict[attempt]
-
 rule dlChrs:
     """
     We have selected the annotated genomes to download. We only want the chromosome-scale scaffolds.
@@ -85,7 +80,6 @@ rule dlChrs:
         This verifies that the files are downloaded and unzipped correctly, and contain all of the expected sequences.
         Therefore, we do not need additional verification steps for the assembly file.
     """
-    input:
     output:
        fasta   = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta", non_empty=True)),
        allscaf = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.all.tsv", non_empty=True),
@@ -97,7 +91,7 @@ rule dlChrs:
     threads: 1
     group: "dlgz"
     resources:
-        mem_mb  = dlChrs_get_mem_mb, # the amount of RAM needed depends on the size of the input genome. Just scale UP.
+        mem_mb  = GenDB.dlChrs_get_mem_mb, # the amount of RAM needed depends on the size of the input genome. Just scale UP.
         time    = 20,  # 20 minutes.
         runtime = 20,
         download_slots = 1
@@ -184,34 +178,6 @@ rule dlPepGff:
         # check if the output protein file exists
         """
 
-def prep_chrom_get_mem_mb(wildcards, attempt):
-    """
-    The amount of RAM needed for the script depends on the size of the input genome, the number of proteins, and the gff size.
-    """
-    attemptdict = {1: 4001,
-                   2: 8001,
-                   3: 16001,
-                   4: 32001,
-                   5: 64001,
-                   6: 128001,
-                   7: 256001,
-                   8: 512001}
-    return attemptdict[attempt]
-
-def prep_chrom_get_time(wildcards, attempt):
-    """
-    The amount of minutes needed varies depending on the input size.
-    """
-    attemptdict = {1: 16,
-                   2: 32,
-                   3: 64,
-                   4: 128,
-                   5: 256,
-                   6: 512,
-                   7: 1024,
-                   8: 2048}
-    return attemptdict[attempt]
-
 rule prep_chrom_file_from_NCBI:
     """
     This takes the output files from the NCBI database and puts them into the file format we need for odp, clink, et cetera
@@ -229,9 +195,9 @@ rule prep_chrom_file_from_NCBI:
     threads: 1
     retries: 7
     resources:
-        mem_mb  = prep_chrom_get_mem_mb, # shouldn't take much RAM, 231228 - I have seen mostly 200 MB or less. Sometimes it blows up to multiple GB.
-        time    = prep_chrom_get_time,    # Most of these end by 5 minutes, but occassionally they take longer.
-        runtime = prep_chrom_get_time
+        mem_mb  = GenDB.prep_chrom_get_mem_mb, # shouldn't take much RAM, 231228 - I have seen mostly 200 MB or less. Sometimes it blows up to multiple GB.
+        time    = GenDB.prep_chrom_get_time,    # Most of these end by 5 minutes, but occassionally they take longer.
+        runtime = GenDB.prep_chrom_get_time
     params:
         chromgen = os.path.join(snakefile_path, "scripts", "NCBIgff2chrom.py"),
         prefix  = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt"
