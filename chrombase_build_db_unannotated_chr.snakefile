@@ -22,6 +22,10 @@ Updates:
   - August 2025 - updates for chrombase
 """
 
+import pandas as pd
+from datetime import datetime
+import yaml
+
 # This block imports fasta-parser as fasta
 import os
 import sys
@@ -34,19 +38,10 @@ src_path = os.path.join(snakefile_path, "../src")
 sys.path.insert(1, src_path)
 import GenDB
 
-import pandas as pd
-from datetime import datetime
-import yaml
-
 # figure out where bin is because we need to use some outside tools
 bin_path = os.path.join(snakefile_path, "../bin")
 
-# 20250901 - TODO not sure why this is commented out
-#if "API_key" not in locals():
-#    API_key = ""
-
 configfile: "config.yaml"
-
 config["tool"] = "odp_ncbi_genome_db"
 
 # Do some logic to see if the user has procided enough information for us to analyse the genomes
@@ -106,13 +101,15 @@ if len(LG_to_db_directory_dict) == 0: # only do this once
         # Also add a pandas dataframe to the dictionary.
         LG_to_db_directory_dict[LG_name] = thisdirectory
         LG_to_rbh_dfs[LG_name] = df
-        outfile =config["tool"] + "/input/LG_proteins/{}.fasta".format(LG_name)
+        outfile = config["tool"] + "/input/LG_proteins/{}.fasta".format(LG_name)
         LG_outfiles.append(outfile)
 
+# I am not sure if this is actually used
 resource_scopes:
-    mem_mb="local",
-    time="local",
-    download_slots="global"
+    mem_mb         = "local",
+    time           = "local",
+    runtime        = "local",
+    download_slots = "global"
 
 wildcard_constraints:
     taxid="[0-9]+",

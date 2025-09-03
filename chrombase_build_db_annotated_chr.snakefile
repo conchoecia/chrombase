@@ -1,4 +1,15 @@
 """
+Program  : GenDB_build_db_annotated.snakefile
+Language : snakemake
+Date     : 2023-10-01
+Author   : Darrin T. Schultz
+Email    : darrin.schultz@univie.ac.at
+Github   : https://github.com/conchoecia/odp
+License  : GNU GENERAL PUBLIC LICENSE, Version 3, 29 June 2007. See the LICENSE file.
+
+Updates:
+  - September 2025 - updates for chrombase
+
 This takes the list of annotated and unannotated genomes and prepares a database from them for ODP.
 
 The program requires that either a directory of the annotated and unannotated genome lists be provided.
@@ -264,7 +275,6 @@ rule generate_assembled_config_entry:
     These will be gathered and concatenated later.
     """
     input:
-        annotated_genomes = config["annotated_genome_chr_tsv"],
         genome            = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz",
         protein           = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.pep.gz",
         chrom             = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.chrom.gz",

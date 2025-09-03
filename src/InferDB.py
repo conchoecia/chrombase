@@ -509,7 +509,8 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
     print("", file = fileout)
     print("*** GETTING THE CHR-SCALE, ANNOTATED ASSEMBLIES ***", file = fileout)
     # First we get the assemblies that have annotations and are chromosome-scale
-    df_annot_chr = df.loc[df["is_annotated"] == 1]
+    df_annot_chr = df.loc[df["Annotation Release Date"].notna()]
+    df_annot_chr = df_annot_chr.loc[df_annot_chr["is_annotated"] == 1]
     df_annot_chr = df_annot_chr.loc[df_annot_chr["Assembly Level"] == "Chromosome"]
     print("  - Getting the genomes that are annotated and chromosome-scale", file = fileout)
     print("    - {}".format(return_stats_string(df_annot_chr)), file = fileout)
@@ -530,7 +531,8 @@ def filter_raw_genome_df(df, hardcoded_ignore_accessions, suppress_text = False)
     print("*** GETTING THE CHR-SCALE, unANNOTATED ASSEMBLIES ***", file = fileout)
     # first we get the assemblies that have no annotations and are chromosome-scale
     # use the "is_annotated" column. 0 means unannotated
-    df_unannot_chr = df.loc[df["is_annotated"] == 0]
+    df_unannot_chr = df.loc[~df["Annotation Release Date"].notna()]
+    df_unannot_chr = df_unannot_chr.loc[df_unannot_chr["is_annotated"] == 0]
     df_unannot_chr = df_unannot_chr.loc[df_unannot_chr["Assembly Level"] == "Chromosome"]
     print("  - Getting the genomes that are unannotated and chromosome-scale", file = fileout)
     print("    - {}".format(return_stats_string(df_unannot_chr)), file = fileout)
