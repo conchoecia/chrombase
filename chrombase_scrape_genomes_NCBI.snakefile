@@ -68,7 +68,7 @@ rule all:
         # The files that will be used for downloading the database.
         expand(config["tool"] + "/output/for_downloading_humanfilt/annotated_chr_notembargoed_{datetime}.tsv",
                 datetime = config["datetime"]),
-        expand(config["tool"] + "/output/for_downloading_humanfilt/unannotated_chr_notembargoed_{datetime}.tsv",
+        expand(config["tool"] + "/output/for_downloading_humanfilt/unannotated_chr_notembargoed_humanfilt_{datetime}.tsv",
                 datetime = config["datetime"]),
         ## report of the final dataset
         #expand(config["tool"] + "/input/report_{taxid}_{datetime}.tsv",
@@ -451,7 +451,7 @@ rule db_for_downloading_limited_human:
         unannotat_non   = config["tool"] + "/output/embargo_filtered/unannotated_chr_notembargoed_{datetime}.tsv"
     output:
         annotated_non   = config["tool"] + "/output/for_downloading_humanfilt/annotated_chr_notembargoed_{datetime}.tsv",
-        unannotat_non   = config["tool"] + "/output/for_downloading_humanfilt/unannotated_chr_notembargoed_{datetime}.tsv"
+        unannotat_non   = config["tool"] + "/output/for_downloading_humanfilt/unannotated_chr_notembargoed_humanfilt_{datetime}.tsv"
     threads: 1
     resources:
         time    = 5, # 5 minutes

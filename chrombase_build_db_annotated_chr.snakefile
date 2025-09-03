@@ -271,6 +271,10 @@ rule generate_assembled_config_entry:
         report            = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.report.txt",
     output:
         yaml   = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.yaml.part", non_empty=True),
+    params:
+        # This doesn't need to be in input. The file itself can change, but as long as we have the assembly already this rule does
+        #   not need to be run again.
+        annotated_genomes = config["annotated_genome_chr_tsv"]
     threads: 1
     resources:
         mem_mb  = 1999,
@@ -278,7 +282,7 @@ rule generate_assembled_config_entry:
         runtime = 10
     run:
         # load in the dataframe of the annotated genomes
-        df = pd.read_csv(input.annotated_genomes, sep="\t")
+        df = pd.read_csv(params.annotated_genomes, sep="\t")
         # strip leading and trailing whitespace from the column names because pandas can screw up sometimes
         df.columns = df.columns.str.strip()
 
