@@ -1,0 +1,15 @@
+# These are files that should be ignored temporarily during database reconstruction in order to
+# force snakemake to create a yaml file for immediate use.
+#
+# For example, if you opt to download the lungfish genomes, they are quite large and can take several days
+# to process. Putting those assemblies on this list uncommented will remove them. Copy the yaml
+# file elsewhere for safe keeping, then comment out those assemblies and restart snakemake.
+#GCA_031142525.1
+#GCA_040581445.1
+#GCA_040939525.1
+#GCA_050004315.1
+#GCA_964205305.1
+#GCA_964204655.1
+#GCA_964261635.1
+#GCA_964263255.1
+#GCA_964300435.1

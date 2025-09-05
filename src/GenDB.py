@@ -172,8 +172,26 @@ def print_gendb_config_summary(config, chr_scale=True, annotated=True, sample_n=
             print(f"[GenDB][WARN] {len(missing_in_map)} assembly accessions present in 'assemAnn' but missing from 'assemAnn_to_scaflen' (showing up to 5): {missing_in_map[:5]}", flush=True)
     print("", flush=True)
 
+def remove_entries_from_df(df, colname, remove_list):
+    """
+    This function takes in a pandas dataframe, a column name, and a list of entries to remove from that column.
+    It returns a new dataframe with the entries removed.
 
-def opening_logic_GenDB_build_db(config, chr_scale = None, annotated = None):
+    Input:
+        - df:          a pandas dataframe
+        - colname:     the name of the column to check
+        - remove_list: a list of entries to remove from the column
+    Output:
+        - df:          a pandas dataframe with the entries removed
+    """
+    start_len = len(df)
+    df = df[~df[colname].isin(remove_list)]
+    end_len = len(df)
+    print("Removed {} entries from the dataframe based on the remove_list.".format(start_len - end_len), file = sys.stderr)
+    return df
+
+
+def opening_logic_GenDB_build_db(config, chr_scale = None, annotated = None, tempignore_path = None):
     """
     This is common logic for all of the GenDB_build_db_*.snakefile scripts.
     Basically just pertains to parsing which files will go into this category.
@@ -232,15 +250,20 @@ def opening_logic_GenDB_build_db(config, chr_scale = None, annotated = None):
         # make a dict where assemAnn is the key and the value is the "Assembly Stats Total Ungapped Length" column
         config["assemAnn_to_scaflen"] = dict(zip(df["Assembly Accession"].tolist(), df["Assembly Stats Total Ungapped Length"].tolist()))
 
-        # TODO This line should probably get its own function later
-        ## get the list of GCAs to ignore in case we need to remove any
-        #ignore_list_path = os.path.join(snakefile_path, "assembly_ignore_list.txt")
-        #with open(ignore_list_path, "r") as f:
-        #    for line in f:
-        #        line = line.strip()
-        #        if line:
-        #            if line in config["assemAnn"]:
-        #                config["assemAnn"].remove(line)
+        if tempignore_path is not None:
+            # ensure that the file exists
+            if not os.path.isfile(tempignore_path):
+                raise IOError("The temporary ignore list file you provided does not exist. {}".format(tempignore_path))
+            # read in the file, and make a list of the entries to remove
+            remove_list = []
+            with open(tempignore_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and line[0] != "#":
+                        remove_list.append(line)
+            print("Removing {} entries from the dataframe based on the temporary ignore list.".format(len(remove_list)), file = sys.stderr)
+            for entry in remove_list:
+                config["assemAnn"].remove(entry)
 
     elif "accession_tsvs" in config:
         # ensure that the user also hasn't specified the directory

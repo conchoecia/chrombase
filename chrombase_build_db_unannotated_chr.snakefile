@@ -38,6 +38,12 @@ src_path = os.path.join(snakefile_path, "src")
 sys.path.insert(1, src_path)
 import GenDB
 
+import math
+from pathlib import Path
+GiB = 1024**3
+def size_gib(p: str) -> float:
+    return max(0.001, Path(p).stat().st_size / GiB)  # float GiB, tiny floor
+
 # figure out where bin is because we need to use some outside tools
 bin_path = os.path.join(snakefile_path, "bin")
 
@@ -60,7 +66,8 @@ config["temp"] = config["tempdir"].rstrip("/").rstrip("\\")
 if not os.path.isdir(config["tempdir"]):
     raise IOError("The temporary directory you provided does not exist. {}".format(config["tempdir"]))
 
-config = GenDB.opening_logic_GenDB_build_db(config, chr_scale = True, annotated = False)
+config = GenDB.opening_logic_GenDB_build_db(config, chr_scale = True, annotated = False,
+                                            tempignore_path = os.path.join(snakefile_path, "data/temporary_ignore_list.txt"))
 # Print some info about the files that we found.
 printed = False
 if not printed:
@@ -117,16 +124,17 @@ wildcard_constraints:
 # first we must load in all of the files. Only do it once
 rule all:
     input:
-        expand(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz", assemAnn=config["assemAnn"]),
-        #LG_outfiles,
-        expand(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.chrom.gz",
-               assemAnn=config["assemAnn"], LG_name=LG_to_db_directory_dict.keys()),
-        expand(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.pep.gz",
-               assemAnn=config["assemAnn"], LG_name=LG_to_db_directory_dict.keys()),
         expand("NCBI_odp_db.unannotated.{LG_name}.yaml",
                LG_name=LG_to_db_directory_dict.keys()),
         expand("NCBI_odp_sp_list.unannotated.{LG_name}.txt",
                LG_name=LG_to_db_directory_dict.keys()),
+        # the creation of the yaml file implies the other files were created
+        #expand(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz", assemAnn=config["assemAnn"]),
+        ##LG_outfiles,
+        #expand(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.chrom.gz",
+        #       assemAnn=config["assemAnn"], LG_name=LG_to_db_directory_dict.keys()),
+        #expand(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.pep.gz",
+        #       assemAnn=config["assemAnn"], LG_name=LG_to_db_directory_dict.keys()),
 
 rule dlChrs:
     """
@@ -153,7 +161,6 @@ rule dlChrs:
     group: "dlgz"
     resources:
         mem_mb = GenDB.dlChrs_get_mem_mb, # 1 GB of RAM
-        time   = 20,  # 20 minutes.
         runtime = 20,
         download_slots = 1
     run:
@@ -174,7 +181,6 @@ rule gzip_fasta_file:
     group: "dlgz"
     resources:
         mem_mb  = 1000, # 1 GB of RAM
-        time    = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn]),
         runtime = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
     shell:
         """
@@ -193,7 +199,6 @@ rule generate_LG_fasta_sequence:
         fasta = config["tool"] + "/input/LG_proteins/{LG_name}.fasta"
     resources:
         mem_mb  = 1000, # 1 GB of RAM
-        time    = 5,     # 5 minutes
         runtime = 5
     threads: 1
     run:
@@ -206,6 +211,9 @@ rule miniprot:
     """
     This handles all of the miniprot steps. Both the indexing and the mapping.
     Doing it this way prevents keeping a ton of temporary data on the hard drive.
+    It is kind of wonky in that it may crash a few times before it works, but it eventually
+      works as the amount of ram increases with each run.
+    Subsequent jobs are usually scheduled on the same nodes, so the index files are often still there.
     """
     input:
         pep    = config["tool"] + "/input/LG_proteins/{LG_name}.fasta",
@@ -219,8 +227,9 @@ rule miniprot:
     resources:
         tmpdir  = config["tempdir"], # the place where the temporary index file will be stored
         mem_mb  = GenDB.miniprot_get_mem_mb, # The RAM usage can blow up during indexing. Often > 10GB. 6Gbp genomes need more than 20GB of RAM.
-        time    = 60,
-        runtime = 60
+        runtime  = lambda wildcards, input: int(math.ceil( # makes this run 30 minutes for every 1/2 GiB of genome size
+            5 + 30 * max(0.001, Path(input.genome).stat().st_size / GiB)
+            ))
     shell:
         """
         INDEXFILE=$TMPDIR/{params.mpi_suffix}
@@ -256,7 +265,6 @@ rule filter_paf_for_longer_scaffold:
     threads: 1
     resources:
         mem_mb  = 1000,
-        time    = 1, # Just 10 minutes
         runtime = 1
     run:
         paf_colnames = ["query",  "qlen", "qstart", "qend", "strand",
@@ -307,7 +315,6 @@ rule paf_to_chrom_and_pep:
     threads: 1
     resources:
         mem_mb  = 1000,
-        time    = 5,   # Just 5 minutes
         runtime = 5
     run:
         paf_colnames = ["query",  "qlen", "qstart", "qend", "strand",
@@ -351,7 +358,6 @@ rule gzChrom:
     threads: 1
     resources:
         mem_mb  = 1000, # shouldn't take a lot of RAM.
-        time    = 5, # 5 minutes
         runtime = 5
     shell:
         """
@@ -374,7 +380,6 @@ rule generate_assembled_config_entry:
         yaml   = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.yaml.part",
     threads: 1
     resources:
-        time    = 5,
         runtime = 5,
         mem_mb  = 1000
     params:
@@ -459,7 +464,6 @@ rule collate_assembled_config_entries:
     threads: 1
     resources:
         mem_mb  = 1000,
-        time    = 5,
         runtime = 5
     shell:
         """
@@ -478,7 +482,6 @@ rule generate_species_list_for_timetree:
         sp_list = "NCBI_odp_sp_list.unannotated.{LG_name}.txt"
     threads: 1
     resources:
-        time    = 5, # 5 minutes
         runtime = 5,
         mem_mb  = 1000
     run:
