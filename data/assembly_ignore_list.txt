@@ -3,6 +3,7 @@
 # Only the first column will be considered. Everything after the first space
 #  character can be used as a comment for that line.
 GCA_000442335.2 This is a database of centromeres - lacks information in the BioSample. Not sure why it is here.
+GCA_024542945.1 This is a hybrid of "allo-octoploid hybrid of Carassius auratus x Cyprinus carpio". Is better to use other assemblies for these species
 GCA_021556685.1
 GCA_013368085.1
 GCA_017607455.1

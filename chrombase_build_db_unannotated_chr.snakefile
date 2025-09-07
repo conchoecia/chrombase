@@ -373,7 +373,7 @@ rule generate_assembled_config_entry:
     These will be gathered and concatenated later.
     """
     input:
-        unannot_genomes = config["unannotated_genome_chr_tsv"],
+        unannot_genomes = ancient(config["unannotated_genome_chr_tsv"]),
         genome          = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz",
         protein = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.pep.gz",
         chrom   = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.chrom.gz"
@@ -386,7 +386,7 @@ rule generate_assembled_config_entry:
     params:
     run:
         # load in the dataframe of the annotated genomes
-        df = pd.read_csv(params.unannot_genomes, sep="\t")
+        df = pd.read_csv(input.unannot_genomes, sep="\t")
         # strip leading and trailing whitespace from the column names because pandas can screw up sometimes
         df.columns = df.columns.str.strip()
 
@@ -420,6 +420,8 @@ rule generate_assembled_config_entry:
         # cleanup the species name
         species = species.replace("sp.", "sp")
         assemAnn = wildcards.assemAnn
+
+        orgnamvalue = row["Organism Name"].values[0]
 
         # now we strip unwanted characters from the genus, species name, and assembly accession
         strip_these_chars = [" ", "_", "-"]
