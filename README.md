@@ -63,3 +63,23 @@ snakemake -s src/GenDB_build_db_unannotated_chr.snakefile --cores <n>
 
 The workflows rely on the NCBI `datasets` and `dataformat` command-line
 tools, which must be installed and discoverable in your `PATH`.
+
+## Cleaning stale genome directories
+
+When accession TSV files change you may want to remove genomes that are no
+longer referenced.  The repository provides a small helper script that
+compares the existing genome directories against the current TSVs and deletes
+any extras:
+
+```bash
+python scripts/cleanup_unused_genomes.py --config config.yaml
+```
+
+By default the script processes both annotated and unannotated genome
+directories.  Use `--annotated` or `--unannotated` to restrict the cleanup to
+one category.  Add `--dry-run` to preview the directories that would be
+removed without deleting them:
+
+```bash
+python scripts/cleanup_unused_genomes.py --dry-run --config config.yaml
+```
