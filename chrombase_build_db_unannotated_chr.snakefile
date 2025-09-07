@@ -373,6 +373,7 @@ rule generate_assembled_config_entry:
     These will be gathered and concatenated later.
     """
     input:
+        unannot_genomes = config["unannotated_genome_chr_tsv"],
         genome          = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz",
         protein = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.pep.gz",
         chrom   = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}_annotated_with_{LG_name}.chrom.gz"
@@ -383,7 +384,6 @@ rule generate_assembled_config_entry:
         runtime = 5,
         mem_mb  = 1000
     params:
-        unannot_genomes = config["unannotated_genome_chr_tsv"],
     run:
         # load in the dataframe of the annotated genomes
         df = pd.read_csv(params.unannot_genomes, sep="\t")
