@@ -611,3 +611,14 @@ rule assembly_report_plot_raw:
         """
         python {input.plotting_script} -i {input.report} -o {output.pdf}
         """
+
+## TODO -implement this rule to summarize all the chromosome-scale genomes
+#rule generate_report_allchr:
+#    """
+#    Generate a report that summarizes the genome provenance of all the chromosome-scale genomes.
+#    """
+#    input:
+#        annotated_non   = config["tool"] + "/output/for_downloading_humanfilt/annotated_chr_notembargoed_{datetime}.tsv",
+#        unannotat_non   = config["tool"] + "/output/for_downloading_humanfilt/unannotated_chr_notembargoed_humanfilt_{datetime}.tsv"
+#    output:
+#        report          = config["tool"] + "/output/for_downloading_humanfilt/report_allchr_{datetime}.txt"
