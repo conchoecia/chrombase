@@ -206,7 +206,6 @@ def main():
     from ete4 import NCBITaxa  # explicit import per your request
 
     # path to the merged.tsv you mentioned (leave as-is)
-    dfpath = "/lisc/scratch/molevo/dts/ODP_genomes/chrombase_20250827/odp_ncbi_genome_scraper/output/for_downloading_humanfilt/merged.tsv"
     TAXID_COL = "Organism Taxonomic ID"
 
     # read table (safely read as strings)
