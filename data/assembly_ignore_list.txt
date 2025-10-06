@@ -4,6 +4,28 @@
 #  character can be used as a comment for that line.
 GCA_000442335.2 This is a database of centromeres - lacks information in the BioSample. Not sure why it is here.
 GCA_024542945.1 This is a hybrid of "allo-octoploid hybrid of Carassius auratus x Cyprinus carpio". Is better to use other assemblies for these species
+GCF_000002135.2 Human from 2004 from JCVI. Suppressed and doesn't cluster with other humans.
+GCA_031225015.1 Sus scrofa genome that clusters separately from other pigs
+GCA_031306245.1 Sus scrofa genome that clusters separately from other pigs
+GCA_037447515.1 Sus scrofa genome that clusters separately from other pigs
+GCA_039654815.1 Sus scrofa genome that clusters separately from other pigs
+GCA_002844635.1 Sus scrofa genome that clusters separately from other pigs
+GCA_046128825.1 Sus scrofa genome that clusters separately from other pigs
+GCA_041937265.1 Sus scrofa genome that clusters separately from other pigs
+GCA_044906105.1 Sus scrofa genome that clusters separately from other pigs
+GCA_044906185.1 Sus scrofa genome that clusters separately from other pigs
+GCA_040869115.1 Sus scrofa genome that clusters separately from other pigs
+GCA_049999145.1 Sus scrofa genome that clusters separately from other pigs
+GCA_007644095.1 Sus scrofa genome that clusters separately from other pigs
+GCA_050231125.1 Sus scrofa genome that clusters separately from other pigs
+GCA_030704935.1 Sus scrofa genome that clusters separately from other pigs
+GCA_024718415.1 Sus scrofa genome that clusters separately from other pigs
+GCA_963921485.1 Sus scrofa genome that clusters separately from other pigs
+GCA_015776825.1 Sus scrofa genome that clusters separately from other pigs
+GCA_006511355.2 Sus scrofa genome that clusters separately from other pigs
+GCA_041729645.1 Sus scrofa genome that clusters separately from other pigs
+GCA_017957985.1 Sus scrofa genome that clusters separately from other pigs
+GCA_020567905.1 Sus scrofa genome that clusters separately from other pigs
 GCA_021556685.1
 GCA_013368085.1
 GCA_017607455.1

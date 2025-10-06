@@ -90,39 +90,39 @@ def gbif_species_count(higher_key=1):
 
 def get_gbif_key_for_taxon(scientific_name):
     """Get GBIF usage key for a scientific name."""
-    # Known GBIF backbone taxonomy keys for animal phyla (verified from GBIF match API)
+    # Known GBIF keys for animal phyla that have issues with the match API
     known_keys = {
         "Ctenophora": 51,
         "Onychophora": 62,
-        "Porifera": 105,
-        "Placozoa": 76,
+        "Porifera": 558,
+        "Placozoa": 7707131,
         "Cnidaria": 43,
-        "Xenacoelomorpha": 7190138,
-        "Chaetognatha": 55,
-        "Hemichordata": 75,
+        "Xenacoelomorpha": 9260547,
+        "Chaetognatha": 117,
+        "Hemichordata": 106,
         "Echinodermata": 50,
         "Chordata": 44,
-        "Nematoda": 5967481,
-        "Nematomorpha": 64,
-        "Priapulida": 5963150,
-        "Kinorhyncha": 5959089,
-        "Loricifera": 5967457,
-        "Tardigrada": 14,
+        "Nematoda": 59,
+        "Nematomorpha": 9085,
+        "Priapulida": 9082,
+        "Kinorhyncha": 9080,
+        "Loricifera": 9086,
+        "Tardigrada": 119,
         "Arthropoda": 54,
         "Mollusca": 52,
         "Annelida": 42,
-        "Platyhelminthes": 108,
-        "Rotifera": 91,
-        "Bryozoa": 53,
-        "Brachiopoda": 110,
-        "Entoprocta": 8173593,
-        "Nemertea": 63,
-        "Phoronida": 19,
-        "Gastrotricha": 22,
-        "Gnathostomulida": 77,
-        "Orthonectida": 5967456,
-        "Cycliophora": 45,
-        "Sipuncula": 74
+        "Platyhelminthes": 56,
+        "Rotifera": 10480,
+        "Bryozoa": 1485,
+        "Brachiopoda": 122,
+        "Entoprocta": 9090,
+        "Nemertea": 9091,
+        "Phoronida": 9092,
+        "Gastrotricha": 9083,
+        "Gnathostomulida": 9084,
+        "Orthonectida": 9088,
+        "Cycliophora": 9087,
+        "Sipuncula": 7952106  # Now part of Annelida in modern taxonomy
     }
     
     # Check known keys first
@@ -206,6 +206,7 @@ def main():
     from ete4 import NCBITaxa  # explicit import per your request
 
     # path to the merged.tsv you mentioned (leave as-is)
+    dfpath = "/lisc/scratch/molevo/dts/ODP_genomes/chrombase_20250827/odp_ncbi_genome_scraper/output/for_downloading_humanfilt/merged.tsv"
     TAXID_COL = "Organism Taxonomic ID"
 
     # read table (safely read as strings)
