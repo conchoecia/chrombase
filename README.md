@@ -83,3 +83,14 @@ removed without deleting them:
 ```bash
 python scripts/cleanup_unused_genomes.py --dry-run --config config.yaml
 ```
+
+## Citing chrombase
+
+If you use `chrombase` in your work, please cite the following paper:
+
+> Schultz, D.T., Blümel, A., Destanović, D., Sarigol, F., & Simakov, O. (2026).
+> Topological mixing and irreversibility in animal chromosome evolution.
+> *Science Advances*, **12**(34), eadz5561.
+> [https://doi.org/10.1126/sciadv.adz5561](https://doi.org/10.1126/sciadv.adz5561)
+
+See also [`CITATION.cff`](CITATION.cff).
