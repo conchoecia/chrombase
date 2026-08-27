@@ -620,8 +620,14 @@ def score_candidate(candidate, route, row, sole_hit=False):
     return score, reasons
 
 
-def confidence_for(score, route, ambiguous=False):
-    if route == "bioproject":
+def confidence_for(score, route, ambiguous=False, reasons=()):
+    # A BioProject link is the submitter's own assertion, but it is not always a
+    # description of *this* assembly: some projects carry an old mitogenome paper
+    # or a consortium overview instead. A paper published years before the
+    # assembly was released cannot be describing it, whatever else it has going
+    # for it, so that disqualifies the authoritative label outright rather than
+    # merely costing points.
+    if route == "bioproject" and not ({"predates_release", "long_after_release"} & set(reasons)):
         return "authoritative"
     if score >= 8:
         level = "high"
@@ -754,7 +760,7 @@ def resolve_one(session, limiter_ncbi, limiter_epmc, cache, row, ambiguous_speci
         key=lambda item: (-item[1], candidate_year(item[0]) or 9999))
 
     ambiguous = row.get("organism_name", "") in ambiguous_species
-    confidence = confidence_for(score, route, ambiguous=ambiguous)
+    confidence = confidence_for(score, route, ambiguous=ambiguous, reasons=reasons)
     if ambiguous and route in ("organism_title", "organism_genus_title"):
         reasons.append("ambiguous_multiassembly_species")
     if confidence == "none":
