@@ -56,6 +56,7 @@ Example
 
 import argparse
 import csv
+import html
 import json
 import os
 import re
@@ -176,6 +177,17 @@ class Cache:
                     json.dump(self.data[namespace], handle)
                 os.replace(tmp, self._path(namespace))
             self.dirty.clear()
+
+
+def clean_text(value):
+    """Europe PMC marks up titles with escaped HTML ('&lt;i&gt;Adineta vaga&lt;/i&gt;').
+
+    Unescape first, then strip the tags that unescaping reveals, so the result is
+    plain text fit to paste into a table.
+    """
+    text = html.unescape(value or "")
+    text = re.sub(r"<[^>]+>", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def make_session():
@@ -456,7 +468,7 @@ def epmc_search(session, limiter, cache, query, page_size=10):
                 "pmid": hit.get("pmid", ""),
                 "pmcid": hit.get("pmcid", ""),
                 "doi": hit.get("doi", ""),
-                "title": re.sub(r"<[^>]+>", "", hit.get("title", "") or "").strip(),
+                "title": clean_text(hit.get("title", "")),
                 "journal": hit.get("journalTitle", "") or "",
                 "authors": hit.get("authorString", "") or "",
                 "year": hit.get("pubYear", "") or "",
@@ -712,6 +724,7 @@ def resolve_one(session, limiter_ncbi, limiter_epmc, cache, row, ambiguous_speci
         row["notes"] = "candidates found but none scored above threshold"
         return row
 
+    candidate = dict(candidate, title=clean_text(candidate.get("title", "")))
     row.update({
         "pub_doi": candidate.get("doi", ""),
         "pub_pmid": candidate.get("pmid", ""),
