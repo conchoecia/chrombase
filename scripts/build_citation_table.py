@@ -204,15 +204,36 @@ def ncbi_params(session):
     return dict(getattr(session, "ncbi_params", {}) or {})
 
 
+def retry_after(response, attempt=0):
+    """Seconds to wait before retrying, honouring the server's own advice.
+
+    NCBI does not always send Retry-After, and once it has started refusing it
+    stays unhappy for a while, so the fallback is deliberately patient.
+    """
+    header = response.headers.get("Retry-After")
+    if header:
+        try:
+            return min(120.0, max(1.0, float(header)))
+        except (TypeError, ValueError):
+            pass
+    if response.status_code == 429:
+        return min(120.0, 10.0 * (2 ** attempt))
+    return min(30.0, 2.0 * (2 ** attempt))
+
+
 def request_json(session, url, limiter, method="GET", **kwargs):
     for attempt in range(5):
         limiter.wait()
         try:
             response = session.request(method, url, timeout=120, **kwargs)
             if response.status_code == 429 or response.status_code >= 500:
+                time.sleep(retry_after(response, attempt))
                 raise requests.RequestException(f"HTTP {response.status_code}")
             response.raise_for_status()
-            return response.json()
+            # NCBI occasionally emits a raw tab inside a JSON string (in the
+            # echoed query translation), which strict JSON rejects. The payload
+            # is otherwise fine, so parse leniently rather than lose the record.
+            return json.loads(response.text, strict=False)
         except (requests.RequestException, ValueError) as exc:
             if attempt == 4:
                 sys.stderr.write(f"    give up on {url}: {exc}\n")
@@ -221,12 +242,13 @@ def request_json(session, url, limiter, method="GET", **kwargs):
     return None
 
 
-def request_text(session, url, limiter, **kwargs):
+def request_text(session, url, limiter, method="GET", **kwargs):
     for attempt in range(5):
         limiter.wait()
         try:
-            response = session.get(url, timeout=120, **kwargs)
+            response = session.request(method, url, timeout=120, **kwargs)
             if response.status_code == 429 or response.status_code >= 500:
+                time.sleep(retry_after(response, attempt))
                 raise requests.RequestException(f"HTTP {response.status_code}")
             response.raise_for_status()
             return response.text
@@ -395,64 +417,82 @@ def flatten_report(accession, report):
 # stage 2: candidate publications
 # --------------------------------------------------------------------------
 
-def bioproject_uid(session, limiter, cache, accession):
-    """Resolve a BioProject accession to its Entrez UID.
+def prefetch_bioproject_publications(session, limiter, cache, accessions, chunk_size=100):
+    """Resolve many BioProject accessions to their publications in a few calls.
 
-    E-utilities `id=` takes a numeric UID, not an accession. Passing an
-    accession does not fail loudly: NCBI reads the digits out of "PRJEB90089"
-    and returns UID 90089, an unrelated project. The accession has to be looked
-    up properly.
+    E-utilities `id=` takes a numeric UID, not an accession. Passing an accession
+    does not fail loudly: NCBI reads the digits out of "PRJEB90089" and returns
+    UID 90089, an unrelated project, whose publications would then be credited to
+    the wrong assembly. So each accession has to be resolved to a UID first.
+
+    Done one accession at a time that is two requests each, which for a few
+    thousand projects is enough traffic to get rate-limited. esearch accepts a
+    disjunction of accessions and efetch accepts many UIDs at once, so a whole
+    chunk costs two requests instead of two hundred. Records are matched back to
+    the accession they report as their own, and an accession missing from the
+    response is left uncached so the next run retries it.
     """
-    cached = cache.get("bioproject_uid", accession)
-    if cached is not None:
-        return cached or None
-    params = dict(ncbi_params(session), db="bioproject",
-                  term=f"{accession}[Project Accession]", retmode="json")
-    data = request_json(session, f"{NCBI_EUTILS}/esearch.fcgi", limiter, params=params)
-    uid = ""
-    try:
-        idlist = data["esearchresult"]["idlist"]
-        uid = idlist[0] if idlist else ""
-    except (KeyError, TypeError, IndexError):
-        uid = ""
-    cache.put("bioproject_uid", accession, uid)
-    return uid or None
+    todo = [accession for accession in dict.fromkeys(accessions)
+            if accession and cache.get("bioproject", accession) is None]
+    if not todo:
+        return
+    sys.stderr.write(f"  {len(todo)} BioProjects to look up\n")
+
+    for start in range(0, len(todo), chunk_size):
+        chunk = todo[start:start + chunk_size]
+        term = " OR ".join(f"{accession}[Project Accession]" for accession in chunk)
+        params = dict(ncbi_params(session), db="bioproject", term=term,
+                      retmode="json", retmax=str(chunk_size * 2))
+        found = request_json(session, f"{NCBI_EUTILS}/esearch.fcgi", limiter,
+                             method="POST", data=params)
+        uids = []
+        try:
+            uids = found["esearchresult"]["idlist"]
+        except (KeyError, TypeError):
+            uids = []
+        if not uids:
+            continue
+
+        params = dict(ncbi_params(session), db="bioproject", id=",".join(uids), retmode="xml")
+        text = request_text(session, f"{NCBI_EUTILS}/efetch.fcgi", limiter,
+                            method="POST", data=params)
+        if text is None:
+            continue
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            continue
+
+        for summary in root.iter("DocumentSummary"):
+            own = [node.get("accession") for node in summary.iter("ArchiveID")
+                   if node.get("accession")]
+            publications = []
+            for node in summary.iter("Publication"):
+                identifier = (node.get("id") or "").strip()
+                if not identifier:
+                    continue
+                if identifier.startswith("10.") or "/" in identifier:
+                    publications.append({"doi": identifier, "pmid": ""})
+                elif identifier.isdigit():
+                    publications.append({"doi": "", "pmid": identifier})
+            # Trust a record only for the accession it reports as its own.
+            for accession in own:
+                if accession in chunk:
+                    cache.put("bioproject", accession, publications)
+
+        sys.stderr.write(f"  BioProjects {min(start + chunk_size, len(todo))}/{len(todo)}\n")
+        cache.flush()
 
 
 def bioproject_publications(session, limiter, cache, bioproject):
-    """Publications the submitter attached to the BioProject record."""
+    """Publications the submitter attached to the BioProject record.
+
+    Populated by prefetch_bioproject_publications(); a miss here means the
+    lookup did not come back, and is left uncached so a later run retries it.
+    """
     if not bioproject:
         return []
-    cached = cache.get("bioproject", bioproject)
-    if cached is not None:
-        return cached
-
-    publications = []
-    uid = bioproject_uid(session, limiter, cache, bioproject)
-    if uid:
-        params = dict(ncbi_params(session), db="bioproject", id=uid, retmode="xml")
-        text = request_text(session, f"{NCBI_EUTILS}/efetch.fcgi", limiter, params=params)
-        root = None
-        if text:
-            try:
-                root = ET.fromstring(text)
-            except ET.ParseError:
-                root = None
-        if root is not None:
-            # Only trust the record if it really is the project we asked for.
-            returned = {node.get("accession") for node in root.iter("ArchiveID")}
-            if bioproject in returned:
-                for node in root.iter("Publication"):
-                    identifier = (node.get("id") or "").strip()
-                    if not identifier:
-                        continue
-                    if identifier.startswith("10.") or "/" in identifier:
-                        publications.append({"doi": identifier, "pmid": ""})
-                    elif identifier.isdigit():
-                        publications.append({"doi": "", "pmid": identifier})
-
-    cache.put("bioproject", bioproject, publications)
-    return publications
+    return cache.get("bioproject", bioproject) or []
 
 
 def epmc_search(session, limiter, cache, query, page_size=10):
@@ -886,7 +926,7 @@ def main():
     if args.api_key:
         session.ncbi_params["api_key"] = args.api_key
 
-    limiter_ncbi = RateLimiter(9 if args.api_key else 2.5)
+    limiter_ncbi = RateLimiter(9 if args.api_key else 1.5)
     limiter_epmc = RateLimiter(6)
     cache = Cache(args.cache_dir)
 
@@ -907,7 +947,12 @@ def main():
             row["confidence"] = "none"
         rows.append(row)
 
-    sys.stderr.write("stage 2: publication recovery\n")
+    sys.stderr.write("stage 2: BioProject publication links\n")
+    prefetch_bioproject_publications(
+        session, limiter_ncbi, cache,
+        [row["bioproject_accession"] for row in rows if row["bioproject_accession"]])
+
+    sys.stderr.write("stage 3: publication recovery\n")
     live = [row for row in rows if row["organism_name"]]
     done = [0]
     lock = threading.Lock()
