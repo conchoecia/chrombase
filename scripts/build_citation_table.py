@@ -89,6 +89,16 @@ GENOME_NOTE_TITLE = re.compile(
     re.IGNORECASE,
 )
 
+# Papers describing a different molecule entirely. A mitochondrial or plastid
+# genome paper is not the source of a chromosome-scale nuclear assembly, but it
+# names the same species and often the same era, so the species-level fallback
+# finds it readily.
+NON_NUCLEAR_TITLE = re.compile(
+    r"(mitochondrial genome|mitochondrial dna|mitogenome|chloroplast|plastid|"
+    r"organellar genome|transcriptome assembl|barcod)",
+    re.IGNORECASE,
+)
+
 OUTPUT_COLUMNS = [
     "assembly_accession",
     "current_accession",
@@ -587,6 +597,12 @@ def score_candidate(candidate, route, row, sole_hit=False):
     if GENOME_NOTE_TITLE.search(title):
         score += 2
         reasons.append("genome_note_title")
+
+    if NON_NUCLEAR_TITLE.search(title):
+        # An organellar or transcriptome paper describes a different sequence
+        # than the chromosome-scale nuclear assembly being credited.
+        score -= 4
+        reasons.append("describes_other_molecule")
 
     # A BioProject that exactly one paper in the literature mentions is very
     # likely the paper that created it, rather than one of many reusing it.

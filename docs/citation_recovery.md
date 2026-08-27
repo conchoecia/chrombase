@@ -62,6 +62,10 @@ Candidates start from a per-route base score and are then adjusted:
 
 - **+3** the species binomial appears in the title (**+2** for the genus alone)
 - **+2** the title looks like a genome announcement ("The genome sequence of …")
+- **−4** the title describes a different molecule — a mitochondrial or plastid
+  genome, or a transcriptome. These name the same species, often from the same
+  era, so the species-level fallback finds them readily, but they are not the
+  source of a chromosome-scale nuclear assembly
 - **+3** exactly one paper in the literature mentions this BioProject
 - **+1** the paper is peer-reviewed rather than a preprint — preprints are kept,
   and are often the only public record of a consortium assembly, but the
