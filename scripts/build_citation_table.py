@@ -383,6 +383,30 @@ def flatten_report(accession, report):
 # stage 2: candidate publications
 # --------------------------------------------------------------------------
 
+def bioproject_uid(session, limiter, cache, accession):
+    """Resolve a BioProject accession to its Entrez UID.
+
+    E-utilities `id=` takes a numeric UID, not an accession. Passing an
+    accession does not fail loudly: NCBI reads the digits out of "PRJEB90089"
+    and returns UID 90089, an unrelated project. The accession has to be looked
+    up properly.
+    """
+    cached = cache.get("bioproject_uid", accession)
+    if cached is not None:
+        return cached or None
+    params = dict(ncbi_params(session), db="bioproject",
+                  term=f"{accession}[Project Accession]", retmode="json")
+    data = request_json(session, f"{NCBI_EUTILS}/esearch.fcgi", limiter, params=params)
+    uid = ""
+    try:
+        idlist = data["esearchresult"]["idlist"]
+        uid = idlist[0] if idlist else ""
+    except (KeyError, TypeError, IndexError):
+        uid = ""
+    cache.put("bioproject_uid", accession, uid)
+    return uid or None
+
+
 def bioproject_publications(session, limiter, cache, bioproject):
     """Publications the submitter attached to the BioProject record."""
     if not bioproject:
@@ -391,23 +415,30 @@ def bioproject_publications(session, limiter, cache, bioproject):
     if cached is not None:
         return cached
 
-    url = f"{NCBI_EUTILS}/efetch.fcgi?db=bioproject&id={bioproject}&retmode=xml"
-    text = request_text(session, url, limiter, params=ncbi_params(session))
     publications = []
-    if text:
-        try:
-            root = ET.fromstring(text)
-        except ET.ParseError:
-            root = None
+    uid = bioproject_uid(session, limiter, cache, bioproject)
+    if uid:
+        params = dict(ncbi_params(session), db="bioproject", id=uid, retmode="xml")
+        text = request_text(session, f"{NCBI_EUTILS}/efetch.fcgi", limiter, params=params)
+        root = None
+        if text:
+            try:
+                root = ET.fromstring(text)
+            except ET.ParseError:
+                root = None
         if root is not None:
-            for node in root.iter("Publication"):
-                identifier = (node.get("id") or "").strip()
-                if not identifier:
-                    continue
-                if identifier.lower().startswith("10.") or "/" in identifier:
-                    publications.append({"doi": identifier, "pmid": ""})
-                elif identifier.isdigit():
-                    publications.append({"doi": "", "pmid": identifier})
+            # Only trust the record if it really is the project we asked for.
+            returned = {node.get("accession") for node in root.iter("ArchiveID")}
+            if bioproject in returned:
+                for node in root.iter("Publication"):
+                    identifier = (node.get("id") or "").strip()
+                    if not identifier:
+                        continue
+                    if identifier.startswith("10.") or "/" in identifier:
+                        publications.append({"doi": identifier, "pmid": ""})
+                    elif identifier.isdigit():
+                        publications.append({"doi": "", "pmid": identifier})
+
     cache.put("bioproject", bioproject, publications)
     return publications
 
