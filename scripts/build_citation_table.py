@@ -132,6 +132,7 @@ OUTPUT_COLUMNS = [
     "confidence",
     "score",
     "n_candidates",
+    "metadata_source",
     "notes",
 ]
 
@@ -379,6 +380,57 @@ def read_genome_list(path):
             seen.add(accession)
             unique.append(accession)
     return unique
+
+
+# Column names a fallback metadata file may use for each field we need. NCBI's
+# own exports and this script's output use different spellings of the same
+# thing, so accept both.
+FALLBACK_COLUMNS = {
+    "assembly_accession": ("assembly_accession", "Assembly Accession", "accession"),
+    "organism_name": ("organism_name", "Organism Name", "taxname"),
+    "tax_id": ("tax_id", "Organism Taxonomic ID", "taxid"),
+    "assembly_name": ("assembly_name", "Assembly Name"),
+    "assembly_level": ("assembly_level", "Assembly Level"),
+    "submitter": ("submitter", "Assembly Submitter"),
+    "release_date": ("release_date", "Assembly Release Date"),
+    "bioproject_accession": ("bioproject_accession", "Assembly BioSample BioProject Accession",
+                             "BioProject Accession"),
+}
+
+
+def read_metadata_fallback(path):
+    """Metadata for assemblies NCBI will no longer serve.
+
+    An accession that has been suppressed, replaced, or withdrawn returns no
+    report, which leaves nothing to search on -- but a database built before the
+    record went away still has the organism and assembly name, and those are
+    enough to find the paper. Accepts this script's own output or a supplementary
+    table exported to TSV/CSV.
+    """
+    with open(path, newline="") as handle:
+        sample = handle.read(8192)
+        handle.seek(0)
+        delimiter = "\t" if sample.count("\t") >= sample.count(",") else ","
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        fields = reader.fieldnames or []
+        chosen = {}
+        for target, options in FALLBACK_COLUMNS.items():
+            for option in options:
+                if option in fields:
+                    chosen[target] = option
+                    break
+        if "assembly_accession" not in chosen:
+            raise SystemExit(f"{path}: no accession column found (looked for "
+                             f"{', '.join(FALLBACK_COLUMNS['assembly_accession'])})")
+        table = {}
+        for row in reader:
+            accession = (row.get(chosen["assembly_accession"]) or "").strip()
+            if not accession:
+                continue
+            table[accession] = {target: (row.get(column) or "").strip()
+                                for target, column in chosen.items()
+                                if target != "assembly_accession"}
+    return table
 
 
 def fetch_assembly_reports(session, limiter, cache, accessions, chunk_size=100):
@@ -948,6 +1000,9 @@ def parse_args():
     parser.add_argument("-u", "--unlinked-report",
                         help="Also write a TSV of assemblies whose publication we recovered but "
                              "whose BioProject record does not link to it.")
+    parser.add_argument("-m", "--metadata-fallback",
+                        help="TSV/CSV of assembly metadata to fall back on when NCBI no longer "
+                             "serves a report for an accession (suppressed, replaced, withdrawn).")
     parser.add_argument("-c", "--cache-dir", default=".citation_cache",
                         help="Directory for cached API responses.")
     parser.add_argument("-e", "--email", default=os.environ.get("NCBI_EMAIL", ""),
@@ -981,11 +1036,23 @@ def main():
     sys.stderr.write("stage 1: assembly metadata from NCBI Datasets\n")
     reports = fetch_assembly_reports(session, limiter_ncbi, cache, accessions)
 
+    fallback = read_metadata_fallback(args.metadata_fallback) if args.metadata_fallback else {}
+    if fallback:
+        sys.stderr.write(f"  fallback metadata available for {len(fallback)} accessions\n")
+
     rows = []
     for accession in accessions:
         row = {column: "" for column in OUTPUT_COLUMNS}
         row.update(flatten_report(accession, reports.get(accession) or {}))
-        if not row["organism_name"]:
+        row["metadata_source"] = "ncbi" if row["organism_name"] else ""
+        if not row["organism_name"] and accession in fallback:
+            for field, value in fallback[accession].items():
+                if value and not row.get(field):
+                    row[field] = value
+            row["submitter_normalized"] = normalize_submitter(row.get("submitter", ""))
+            row["metadata_source"] = "fallback"
+            row["notes"] = "metadata from fallback file; no current NCBI assembly report"
+        elif not row["organism_name"]:
             row["notes"] = "no NCBI assembly report (suppressed, replaced, or withdrawn)"
             row["confidence"] = "none"
         rows.append(row)

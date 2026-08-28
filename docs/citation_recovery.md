@@ -106,6 +106,15 @@ python scripts/build_citation_table.py \
 The genome list may be a chrombase `genome_list.tsv`, an NCBI Datasets TSV (a
 column named `Assembly Accession`), or a plain file of accessions.
 
+`--metadata-fallback` supplies metadata for accessions NCBI will no longer serve.
+An assembly that has been suppressed, replaced, or withdrawn returns no report,
+which leaves nothing to search on — but a table built while the record was still
+live has the organism and assembly name, and those are enough to find the paper.
+Of the 5,821 assemblies in the published database, 105 have since stopped
+resolving at NCBI; feeding the paper's own supplementary table back in recovers
+publications for 83 of them. Rows filled this way are marked
+`metadata_source=fallback`.
+
 Every API response is cached under `--cache-dir` (default `.citation_cache`), so
 an interrupted run resumes cheaply and a repeat run costs no API calls. Set
 `NCBI_API_KEY` — or pass `--api-key` — to raise the E-utilities rate limit from 3
@@ -136,6 +145,7 @@ memory and write it whole, so the second to finish discards the other's work.
 | `pub_doi`, `pub_pmid`, `pub_pmcid`, `pub_year`, `pub_title`, `pub_journal`, `pub_authors` | The recovered publication |
 | `citation` | Formatted reference, ready to paste into a supplementary table |
 | `evidence_route`, `confidence`, `score`, `n_candidates`, `notes` | How the publication was found, and how much to trust it |
+| `metadata_source` | `ncbi`, or `fallback` when NCBI no longer serves the record and `--metadata-fallback` supplied it |
 
 `--bibtex` writes the same references deduplicated, for anyone who wants to cite
 the underlying assemblies directly.
