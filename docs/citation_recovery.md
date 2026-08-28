@@ -54,7 +54,7 @@ credited at the group level.
 | `accession` | Europe PMC full-text search for `GCA_…`/`GCF_…` | Low yield: papers usually cite a BioProject rather than an assembly accession. |
 | `bioproject_text` | Europe PMC full-text search for `PRJNA…`/`PRJEB…` | A paper that *uses* an assembly cites the same BioProject as the paper that *produced* it, so this alone is weak. A BioProject that exactly one paper mentions is much stronger evidence, and is scored up. |
 | `organism_title` | Europe PMC search for a genome paper whose title names the species | Identifies the species, not the assembly. Capped at `medium`, and dropped to `low` when the database holds assemblies of that species from more than one group. |
-| `organism_genus_title` | The same search on the genus alone | Last resort, used only when the species search returns nothing — usually a naming mismatch (`Knipowitschia caucasica` in NCBI vs `Knipowitschia cf. caucasica` in the paper). Capped at `low`. |
+| `organism_genus_title` | The same search on the genus alone (matched case-sensitively, so a genus is not matched against another organism's species epithet — *Metoecus paradoxus* must not match the bacterium *Vibrio metoecus*) | Last resort, used only when the species search returns nothing — usually a naming mismatch (`Knipowitschia caucasica` in NCBI vs `Knipowitschia cf. caucasica` in the paper). Capped at `low`. |
 
 ## Scoring
 
@@ -62,6 +62,10 @@ Candidates start from a per-route base score and are then adjusted:
 
 - **+3** the species binomial appears in the title (**+2** for the genus alone)
 - **+2** the title looks like a genome announcement ("The genome sequence of …")
+- **−7** the title is a prokaryotic isolate announcement ("Complete genome
+  sequence of *Pseudomonas aeruginosa* strain NCTR 501, isolated from …"). These
+  name their host organism in the title, and describe themselves as a genome
+  sequence, so a species-level search mistakes them for an animal genome paper
 - **−4** the title describes a different molecule — a mitochondrial or plastid
   genome, or a transcriptome. These name the same species, often from the same
   era, so the species-level fallback finds them readily, but they are not the

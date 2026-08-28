@@ -93,6 +93,15 @@ GENOME_NOTE_TITLE = re.compile(
 # genome paper is not the source of a chromosome-scale nuclear assembly, but it
 # names the same species and often the same era, so the species-level fallback
 # finds it readily.
+# Prokaryotic isolate announcements. These name their host or source organism in
+# the title ("... isolated from Mus musculus"), which is enough for a
+# species-level search to mistake them for an animal genome paper.
+ISOLATE_TITLE = re.compile(
+    r"(\bstrain\s+[A-Z0-9]|\bisolated from\b|\bsp\. nov\.,? isolated\b|"
+    r"\b(bacteri|archae|virus|viral|phage|plasmid)\w*\b)",
+    re.IGNORECASE,
+)
+
 NON_NUCLEAR_TITLE = re.compile(
     r"(mitochondrial genome|mitochondrial dna|mitogenome|chloroplast|plastid|"
     r"organellar genome|transcriptome assembl|barcod)",
@@ -581,22 +590,34 @@ def score_candidate(candidate, route, row, sole_hit=False):
     score = ROUTE_BASE.get(route, 0)
     reasons = [route]
 
-    title = (candidate.get("title") or "").lower()
+    raw_title = candidate.get("title") or ""
+    title = raw_title.lower()
     organism = (row.get("organism_name") or "").strip()
     parts = organism.split()
-    genus = parts[0].lower() if parts else ""
+    genus = parts[0] if parts else ""
     binomial = " ".join(parts[:2]).lower() if len(parts) >= 2 else ""
 
     if binomial and binomial in title:
         score += 3
         reasons.append("binomial_in_title")
-    elif genus and genus in title:
+    elif genus and re.search(rf"\b{re.escape(genus)}\b", raw_title):
+        # Case-sensitive, so the genus of interest is not matched against the
+        # species epithet of something else: "Metoecus paradoxus" must not match
+        # the bacterium "Vibrio metoecus".
         score += 2
         reasons.append("genus_in_title")
 
     if GENOME_NOTE_TITLE.search(title):
         score += 2
         reasons.append("genome_note_title")
+
+    if ISOLATE_TITLE.search(title):
+        # A bacterial or viral isolate paper that happens to name the animal it
+        # was collected from is not a description of that animal's genome. These
+        # announce themselves as "Complete genome sequence of ...", so the
+        # genome-note bonus does not rescue them; the penalty has to outweigh it.
+        score -= 7
+        reasons.append("isolate_announcement")
 
     if NON_NUCLEAR_TITLE.search(title):
         # An organellar or transcriptome paper describes a different sequence
