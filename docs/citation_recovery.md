@@ -24,10 +24,12 @@ field at all, and the BioProject record — the one place a submitter *can* atta
 a publication — is usually left empty. Sometimes no paper exists. Often one does,
 and nothing connects the two.
 
-`scripts/build_citation_table.py` addresses what can be addressed
-programmatically: it recovers the originating publication for as many assemblies
-as the public APIs allow, and reports the assemblies where a paper exists but
-NCBI does not link to it.
+`scripts/build_citation_table.py` addresses the candidate-retrieval stage
+programmatically: it nominates a possible originating publication for as many
+assemblies as the public APIs allow, and reports candidate links missing from
+NCBI. Candidate retrieval is not exact-build verification. A paper can be
+strongly linked to the species or BioProject while announcing an earlier build,
+describing a project, or reusing the assembly downstream.
 
 ## What it does
 
@@ -35,15 +37,18 @@ For each accession in a chrombase genome list:
 
 1. Fetches assembly metadata from the NCBI Datasets API in bulk (organism,
    assembly name, submitter, BioProject, release date).
-2. Looks for the originating publication along several routes.
+2. Looks for originating-publication candidates along several routes.
 3. Scores the candidates and keeps the best one, with an explicit confidence
    level and a record of the evidence used.
-4. Writes one row per assembly, including a ready-to-paste reference string, plus
-   an optional BibTeX file and an optional report of the links NCBI is missing.
+4. Writes one row per assembly, including a reference string for review, plus an
+   optional BibTeX file and an optional report of candidate links NCBI is
+   missing.
 
-Nothing is invented. An assembly with no recoverable publication is written out
+Nothing is invented. An assembly with no recoverable candidate is written out
 with `confidence=none`, and its submitter is retained so it can at least be
-credited at the group level.
+credited at the group level. Conversely, a populated candidate is not safe to
+treat as an originating citation until assembly-specific evidence has been
+checked.
 
 ## Resolution routes
 
@@ -142,20 +147,20 @@ memory and write it whole, so the second to finish discards the other's work.
 | `assembly_name`, `assembly_level`, `source_database` | Assembly identity |
 | `submitter`, `submitter_normalized` | NCBI submitter, verbatim and case-folded. NCBI stores this as free text, so one institution can appear under several spellings; the normalized column collapses them so credit can be counted per group. |
 | `bioproject_accession`, `release_date` | Provenance |
-| `pub_doi`, `pub_pmid`, `pub_pmcid`, `pub_year`, `pub_title`, `pub_journal`, `pub_authors` | The recovered publication |
-| `citation` | Formatted reference, ready to paste into a supplementary table |
+| `pub_doi`, `pub_pmid`, `pub_pmcid`, `pub_year`, `pub_title`, `pub_journal`, `pub_authors` | The nominated candidate publication |
+| `citation` | Formatted candidate reference for review |
 | `evidence_route`, `confidence`, `score`, `n_candidates`, `notes` | How the publication was found, and how much to trust it |
 | `metadata_source` | `ncbi`, or `fallback` when NCBI no longer serves the record and `--metadata-fallback` supplied it |
 
-`--bibtex` writes the same references deduplicated, for anyone who wants to cite
-the underlying assemblies directly.
+`--bibtex` writes the same candidate references deduplicated. Validate them
+against the exact assembly build before citing the underlying assemblies.
 
-`--unlinked-report` writes the actionable subset: assemblies whose publication
-was recovered by some route *other* than the BioProject record. In each of these
-cases the paper exists and is public, but NCBI does not connect it to the
-assembly. Submitters can fix this by adding the publication to their own
-BioProject record, which makes the link available to everyone rather than only to
-whoever re-derives it.
+`--unlinked-report` writes the review subset whose candidate was recovered by a
+route *other* than the BioProject record. The paper exists and is public, but the
+assembly-to-paper relationship still needs exact-build validation. After that
+validation, submitters can add a confirmed publication to their own BioProject
+record, making the link available to everyone rather than only to whoever
+re-derives it.
 
 ## Limits
 
@@ -167,8 +172,8 @@ whoever re-derives it.
 - `authoritative` means the submitter attached this publication to the
   BioProject and the dates are consistent. It does not guarantee the paper
   describes this assembly rather than an earlier one for the same organism.
-- Nothing below `medium` should be used as a citation without a human checking
-  it. The `citation`, `evidence_route`, `confidence` and `notes` columns exist so
-  that check is quick.
+- No confidence tier should be interpreted as full-text proof that the paper
+  produced the exact assembly. The `citation`, `evidence_route`, `confidence`
+  and `notes` columns support a separate validation step.
 - Recovering a citation is not the same as crediting a person. This narrows the
   gap; it does not close it.

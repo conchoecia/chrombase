@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Recover the originating publication for every genome assembly in a chrombase
-genome list, and emit a citable table.
+Nominate an originating-publication candidate for every genome assembly in a
+chrombase genome list, and emit a reviewable table.
 
 Genome databases assembled at tree-of-life scale routinely contain thousands of
 assemblies, and it is not possible to cite each originating paper in the body of
@@ -11,8 +11,9 @@ assembly, and it is invisible to citation indices.
 
 This script closes as much of that gap as the public APIs allow.  For each
 accession it collects the NCBI assembly metadata, then tries several routes to
-find the paper the assembly came from, scores the candidates, and writes one row
-per assembly with a resolved DOI/PMID and a ready-to-paste reference string.
+find possible papers, scores the candidates, and writes one row per assembly
+with a candidate DOI/PMID and a reference string for review. Retrieval confidence
+is not proof that the paper produced the exact assembly build.
 
 Resolution routes, in order of trust:
 
@@ -975,7 +976,7 @@ def summarize(rows, handle=sys.stderr):
     resolved = sum(1 for row in rows if row.get("pub_doi") or row.get("pub_pmid"))
     handle.write("\n=== summary ===\n")
     handle.write(f"assemblies:            {len(rows)}\n")
-    handle.write(f"with a publication:    {resolved} ({100.0 * resolved / max(len(rows), 1):.1f}%)\n")
+    handle.write(f"with a candidate:      {resolved} ({100.0 * resolved / max(len(rows), 1):.1f}%)\n")
     handle.write("by confidence:\n")
     for level in ("authoritative", "high", "medium", "low", "none"):
         if confidence.get(level):
@@ -991,14 +992,14 @@ def summarize(rows, handle=sys.stderr):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Recover originating publications for genome assemblies and write a citable table.",
+        description="Nominate originating-publication candidates for genome assemblies and write a reviewable table.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-g", "--genome-list", required=True,
                         help="chrombase genome_list.tsv, an NCBI datasets TSV, or a file of accessions.")
     parser.add_argument("-o", "--out", required=True, help="Output TSV.")
     parser.add_argument("-b", "--bibtex", help="Also write a deduplicated BibTeX file.")
     parser.add_argument("-u", "--unlinked-report",
-                        help="Also write a TSV of assemblies whose publication we recovered but "
+                        help="Also write a TSV of assemblies whose publication we nominated but "
                              "whose BioProject record does not link to it.")
     parser.add_argument("-m", "--metadata-fallback",
                         help="TSV/CSV of assembly metadata to fall back on when NCBI no longer "
