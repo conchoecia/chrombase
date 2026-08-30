@@ -84,6 +84,36 @@ removed without deleting them:
 python scripts/cleanup_unused_genomes.py --dry-run --config config.yaml
 ```
 
+## Recovering citations for the genomes in a database
+
+A database built by chrombase can hold thousands of assemblies, each one the
+product of someone's work. NCBI records the *submitting institution* for an
+assembly but not the paper it came from, so a study using the database has no
+practical way to cite the people who produced the data.
+
+`scripts/build_citation_table.py` nominates an originating-publication candidate
+for as many assemblies as the public APIs allow, and writes a reviewable table:
+
+```bash
+python scripts/build_citation_table.py \
+    --genome-list genome_database/genome_list.tsv \
+    --out citation_table.tsv \
+    --bibtex citation_table.bib \
+    --unlinked-report ncbi_missing_publication_links.tsv \
+    --email you@example.org
+```
+
+It queries the NCBI Datasets and BioProject APIs and Europe PMC, scores the
+candidate publications, and records how each one was found along with a
+confidence level. The score measures retrieval evidence; it is not proof that a
+paper produced the exact assembly build. Assemblies with no candidate keep their
+submitter so they can still be credited at the group level, and
+`--unlinked-report` lists candidate publication links absent from NCBI for
+review.
+
+See [`docs/citation_recovery.md`](docs/citation_recovery.md) for the resolution
+routes, the scoring, and the output columns.
+
 ## Citing chrombase
 
 If you use `chrombase` in your work, please cite the following paper:
