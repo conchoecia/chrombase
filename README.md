@@ -112,7 +112,9 @@ submitter so they can still be credited at the group level, and
 review.
 
 See [`docs/citation_recovery.md`](docs/citation_recovery.md) for the resolution
-routes, the scoring, and the output columns.
+routes, the scoring, and the output columns. Candidate retrieval is followed by
+the exact-build validation described in
+[`docs/citation_validation.md`](docs/citation_validation.md).
 
 ## Citing chrombase
 
