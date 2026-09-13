@@ -54,10 +54,8 @@ config["tool"] = "odp_ncbi_genome_db"
 if ("directory" not in config) and ("accession_tsvs" not in config):
     raise IOError("You must provide either a directory of the annotated and unannotated genome lists, or a list of the paths to those tsv files. Read the config file.")
 
-config["tempdir"] = "/tmp"
-# check that the tempdir exists
 if "tempdir" not in config:
-    raise IOError("You must provide a temporary directory to store temporary files. Read the config file for instructions.")
+    config["tempdir"] = "/tmp"
 
 # Strip all trailing slashes from the tempdir
 #  20250901 NOTE - I'm not sure why this is here, maybe in case the tempdir has space characters?
@@ -71,7 +69,7 @@ config = GenDB.opening_logic_GenDB_build_db(config, chr_scale = True, annotated 
 # Print some info about the files that we found.
 printed = False
 if not printed:
-    GenDB.print_gendb_config_summary(config, chr_scale=True, annotated=True)
+    GenDB.print_gendb_config_summary(config, chr_scale=True, annotated=False)
     printed = True
 
 # One key feature of this script is that we will map proteins from
@@ -148,53 +146,41 @@ rule dlChrs:
       - 12-31-2023 - Using the command line had too many edge cases that didn't work, so I resorted to using python to do a more careful job.
         This verifies that the files are downloaded and unzipped correctly, and contain all of the expected sequences.
         Therefore, we do not need additional verification steps for the assembly file.
+      - 2026-09 - The NCBI package is downloaded to the job's $TMPDIR and the chromosomes are streamed
+        straight into .chr.fasta.gz. This replaces the separate gzip_fasta_file rule, so a job that dies
+        no longer leaves an unpacked package, an uncompressed .chr.fasta or a half-written .gz in the database.
     """
     output:
-       fasta   = temp(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta"),
+       fasta   = ensure(config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz", non_empty=True),
        allscaf = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.all.tsv",
        chrscaf = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.chr.tsv"
     retries: 3
     params:
         datasets = os.path.join(bin_path, "datasets"),
         outdir   = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/",
-    threads: 1
-    group: "dlgz"
+    threads: 4 # compression threads
     resources:
-        mem_mb = GenDB.dlChrs_get_mem_mb, # 1 GB of RAM
-        runtime = 20,
+        mem_mb  = GenDB.dlChrs_get_mem_mb,
+        runtime = lambda wildcards, attempt: GenDB.dlChrs_get_runtime(config["assemAnn_to_scaflen"][wildcards.assemAnn], attempt),
         download_slots = 1
     run:
         result = GenDB.download_unzip_genome(wildcards.assemAnn, params.outdir,
-                                             params.datasets, chrscale = True)
+                                             params.datasets, chrscale = True,
+                                             threads = threads)
         if result != 0:
             raise ValueError("The download of the genome {} failed.".format(wildcards.assemAnn))
-
-rule gzip_fasta_file:
-    """
-    In this step zip the fasta file to conserve space.
-    """
-    input:
-        genome = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta",
-    output:
-        genome = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz"
-    threads: 1
-    group: "dlgz"
-    resources:
-        mem_mb  = 1000, # 1 GB of RAM
-        runtime = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
-    shell:
-        """
-        echo "Gzipping the fasta file."
-        gzip < {input.genome} > {output.genome}
-        """
 
 rule generate_LG_fasta_sequence:
     """
     Currently, in the LG database, the sequences are only available as alignments.
     Here, we just concatenate all of the alignments, then strip the gaps.
+
+    The input is the aligned/ directory, not the whole LG database directory. odp writes index files
+      such as {LG_name}.hmm.ssi into the LG database directory. That updates the directory's modification
+      time, which made the LG protein file, and therefore every miniprot mapping, look out of date.
     """
     input:
-        LG_dir = lambda wildcards: LG_to_db_directory_dict[wildcards.LG_name]
+        aligned = lambda wildcards: os.path.join(LG_to_db_directory_dict[wildcards.LG_name], "aligned")
     output:
         fasta = config["tool"] + "/input/LG_proteins/{LG_name}.fasta"
     resources:
@@ -203,8 +189,8 @@ rule generate_LG_fasta_sequence:
     threads: 1
     run:
         with open(output.fasta, "w") as o:
-            for fastafile in os.listdir(input.LG_dir + "/aligned"):
-                for record in fasta.parse(input.LG_dir + "/aligned/" + fastafile):
+            for fastafile in os.listdir(input.aligned):
+                for record in fasta.parse(os.path.join(input.aligned, fastafile)):
                     o.write(">{}\n{}\n".format(record.id, record.seq.replace("-", "")))
 
 rule miniprot:
@@ -219,16 +205,18 @@ rule miniprot:
         pep    = config["tool"] + "/input/LG_proteins/{LG_name}.fasta",
         genome = config["tool"] + "/output/source_data/unannotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz",
     output:
-        paf  = config["tool"] + "/output/mapped_reads/{assemAnn}/{LG_name}_to_{assemAnn}.paf"
+        # The raw hits are only read by filter_paf_for_longer_scaffold. The .filt.paf is kept.
+        paf  = temp(config["tool"] + "/output/mapped_reads/{assemAnn}/{LG_name}_to_{assemAnn}.paf")
     threads: 8
     retries: 8
     params:
         mpi_suffix = "{LG_name}_{assemAnn}.filt.fasta.gz.mpi" # this is the temporary index file
     resources:
         tmpdir  = config["tempdir"], # the place where the temporary index file will be stored
-        mem_mb  = GenDB.miniprot_get_mem_mb, # The RAM usage can blow up during indexing. Often > 10GB. 6Gbp genomes need more than 20GB of RAM.
-        runtime  = lambda wildcards, input: int(math.ceil( # makes this run 30 minutes for every 1/2 GiB of genome size
-            5 + 30 * max(0.001, Path(input.genome).stat().st_size / GiB)
+        # The RAM usage blows up during indexing and grows with genome size, so the first request is scaled to the assembly length.
+        mem_mb  = lambda wildcards, attempt: GenDB.miniprot_get_mem_mb(config["assemAnn_to_scaflen"][wildcards.assemAnn], attempt),
+        runtime  = lambda wildcards, input, attempt: int(math.ceil( # 5 minutes plus 30 minutes per GiB of gzipped genome, doubled on each retry
+            (5 + 30 * max(0.001, Path(input.genome).stat().st_size / GiB)) * 2 ** (attempt - 1)
             ))
     shell:
         """
@@ -265,7 +253,7 @@ rule filter_paf_for_longer_scaffold:
     threads: 1
     resources:
         mem_mb  = 1000,
-        runtime = 1
+        runtime = 10
     run:
         paf_colnames = ["query",  "qlen", "qstart", "qend", "strand",
                          "target", "tlen", "tstart", "tend", "matches",

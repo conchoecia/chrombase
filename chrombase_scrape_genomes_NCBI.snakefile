@@ -96,7 +96,9 @@ rule download_json:
         mem_mb = 1000
     shell:
         """
-        {params.datasets} summary genome taxon --as-json-lines {wildcards.taxid} > {output.genome_report}
+        # NCBI_API_KEY, if set, raises the NCBI request limit. The key itself is not echoed.
+        {params.datasets} summary genome taxon --as-json-lines {wildcards.taxid} \
+            ${{NCBI_API_KEY:+--api-key "$NCBI_API_KEY"}} > {output.genome_report}
         """
 
 rule format_json_to_tsv:
@@ -163,6 +165,7 @@ rule dryrun_download_all_annotations:
     shell:
         """
         {params.datasets} download genome accession --inputfile {input.accession_list} \
+            ${{NCBI_API_KEY:+--api-key "$NCBI_API_KEY"}} --no-progressbar \
             --include gff3,protein --dehydrated --filename {output.zipped}
         """
 
