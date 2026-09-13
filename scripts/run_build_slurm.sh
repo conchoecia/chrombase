@@ -29,11 +29,12 @@
 
 set -euo pipefail
 
-KIND=${1:?usage: run_build_slurm.sh annotated|unannotated}
+KIND=${1:?usage: run_build_slurm.sh annotated|unannotated [extra snakemake arguments]}
 case "$KIND" in
     annotated|unannotated) ;;
-    *) echo "usage: run_build_slurm.sh annotated|unannotated" >&2; exit 1 ;;
+    *) echo "usage: run_build_slurm.sh annotated|unannotated [extra snakemake arguments]" >&2; exit 1 ;;
 esac
+shift
 
 # sbatch runs a spooled copy of this script, so the repository location has to come from
 # the environment when submitted that way.
@@ -60,4 +61,5 @@ snakemake --snakefile "$SNAKEFILE" \
     --rerun-incomplete \
     --rerun-triggers mtime \
     --drop-metadata \
-    --slurm-logdir log
+    --slurm-logdir log \
+    "$@"
