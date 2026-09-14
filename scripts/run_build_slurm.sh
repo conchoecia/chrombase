@@ -53,6 +53,14 @@ if [ -z "${NCBI_API_KEY:-}" ]; then
     echo "NCBI_API_KEY is not set; NCBI requests will use the lower anonymous rate limit." >&2
 fi
 
+# Inside a SLURM job, snakemake-executor-plugin-slurm 2.0.3 sleeps 5 s before it sets its run ID,
+# while its job status thread is already running. The status thread then fails and the controller
+# waits forever, with nothing in its log. Removing the SLURM_* variables, which the plugin does anyway
+# after that sleep, avoids the race. Plugin 2.8.0 sets the run ID first.
+for var in $(compgen -e | grep '^SLURM_'); do
+    unset "$var"
+done
+
 snakemake --snakefile "$SNAKEFILE" \
     --executor slurm \
     --jobs "${JOBS:-700}" \
