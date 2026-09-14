@@ -227,9 +227,14 @@ rule generate_assembled_config_entry:
         # strip leading and trailing whitespace from the column names because pandas can screw up sometimes
         df.columns = df.columns.str.strip()
 
-        # read in the report into pandas if we can. Strip all the excess whitespace since the columns are formatted with whitespace
-        reportdf = pd.read_csv(input.report, comment = "#", delim_whitespace=True)
-        minscaflen = reportdf["scaflen"].min() - 1000
+        # minscaflen is the smallest chromosome-scale scaffold that carries a protein, minus 1000 bp.
+        #  It used to be read from the per-scaffold table in the NCBIgff2chrom.py report, which the bundled
+        #  version of that script no longer writes. The lengths come from the scaffold table saved by dlChrs.
+        scaf_df = pd.read_csv(os.path.join(os.path.dirname(input.chrom), wildcards.assemAnn + ".scaffold_df.chr.tsv"), sep="\t")
+        scafs_with_proteins = set(pd.read_csv(input.chrom, sep="\t", header=None, usecols=[1], names=["scaf"])["scaf"])
+        name_col = max([c for c in ["genbank_accession", "refseq_accession"] if c in scaf_df.columns],
+                       key = lambda c: scaf_df[c].isin(scafs_with_proteins).sum())
+        minscaflen = scaf_df.loc[scaf_df[name_col].isin(scafs_with_proteins), "length"].min() - 1000
 
         row = df.loc[df["Assembly Accession"] == wildcards.assemAnn]
         taxid = int(row["Organism Taxonomic ID"].values[0])

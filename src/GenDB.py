@@ -66,26 +66,29 @@ def dlChrs_get_mem_mb(wildcards, attempt):
 def dlChrs_get_runtime(basepairs, attempt) -> int:
     """
     Minutes to download an assembly and write its chromosome-scale scaffolds to .chr.fasta.gz.
-    10 minutes (this includes up to 4 minutes of randomized sleeps) plus 6 minutes per Gbp of
+    30 minutes (this includes up to 4 minutes of randomized sleeps) plus 6 minutes per Gbp of
       assembly, doubled on each retry. The fixed 20 minute limit used before killed the largest
-      downloads part way through.
+      downloads part way through. Download speed from NCBI varies more than genome size does:
+      in a 34 genome test build a 2.3 Gbp genome took 22 minutes and a 19.8 Gbp genome 37 minutes.
 
     Returns an int, because SLURM only takes ints for runtime.
     """
-    return int(math.ceil((10 + 6.0 * (basepairs / 1e9)) * 2 ** (attempt - 1)))
+    return int(math.ceil((30 + 6.0 * (basepairs / 1e9)) * 2 ** (attempt - 1)))
 
 def miniprot_get_mem_mb(basepairs, attempt):
     """
     The amount of RAM needed for miniprot is dominated by indexing the genome, which grows with
-      the assembly size. The first request is 12 GB per Gbp of assembly (at least 16 GB), and it
+      the assembly size. The first request is 14 GB per Gbp of assembly (at least 16 GB), and it
       doubles on each retry up to 1.5 TB.
 
     UPDATES:
       - 202609 - In the September 2025 build every genome started at 16 GB. That ran out of memory
                  for 400 genomes of 1.5 to 5 Gbp, and the largest requests that still ran out were
                  about 11 GB per Gbp. No genome under 1.4 Gbp ran out of memory at 16 GB.
+      - 202609 - In a test build of 19 genomes of 0.1 to 22 Gbp, genomes of 1.7 Gbp and larger used
+                 6.5 to 10 GB per Gbp.
     """
-    first = max(16000, 12000 * (basepairs / 1e9))
+    first = max(16000, 14000 * (basepairs / 1e9))
     return _double_per_attempt(first, attempt, 1536000)
 
 def prep_chrom_get_mem_mb(wildcards, attempt):

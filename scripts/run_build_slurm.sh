@@ -22,6 +22,7 @@
 #                           Rerun decisions only compare recorded metadata, so nothing reruns
 #                           because a record is missing.
 #   --rerun-incomplete      Outputs of jobs that were killed are removed and rebuilt.
+#   --keep-going            A genome that fails does not stop the build of the other genomes.
 # The SLURM executor deletes the logs of successful jobs, so log/ only keeps failed jobs.
 #
 # If the controller itself is cancelled, run `snakemake --unlock` with the same snakefile
@@ -66,6 +67,7 @@ snakemake --snakefile "$SNAKEFILE" \
     --jobs "${JOBS:-700}" \
     --resources download_slots="${DOWNLOAD_SLOTS:-25}" \
     --default-resources mem_mb=8000 runtime=60 \
+    --keep-going \
     --rerun-incomplete \
     --rerun-triggers mtime \
     --drop-metadata \
