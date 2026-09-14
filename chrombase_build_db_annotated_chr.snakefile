@@ -79,72 +79,48 @@ rule dlChrs:
       - 12-31-2023 - Using the command line had too many edge cases that didn't work, so I resorted to using python to do a more careful job.
         This verifies that the files are downloaded and unzipped correctly, and contain all of the expected sequences.
         Therefore, we do not need additional verification steps for the assembly file.
+      - 2026-09 - The NCBI package is downloaded to the job's $TMPDIR and the chromosomes are streamed
+        straight into .chr.fasta.gz. This replaces the separate gzip_fasta_file rule, so a job that dies
+        no longer leaves an unpacked package, an uncompressed .chr.fasta or a half-written .gz in the database.
     """
     output:
-       fasta   = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta", non_empty=True)),
+       fasta   = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz", non_empty=True),
        allscaf = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.all.tsv", non_empty=True),
        chrscaf = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.scaffold_df.chr.tsv", non_empty=True)
     retries: 3
     params:
         datasets = os.path.join(bin_path, "datasets"),
         outdir   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/",
-    threads: 1
-    group: "dlgz"
+    threads: 4 # compression threads
     resources:
-        mem_mb  = GenDB.dlChrs_get_mem_mb, # the amount of RAM needed depends on the size of the input genome. Just scale UP.
-        time    = 20,  # 20 minutes.
-        runtime = 20,
+        mem_mb  = GenDB.dlChrs_get_mem_mb,
+        runtime = lambda wildcards, attempt: GenDB.dlChrs_get_runtime(config["assemAnn_to_scaflen"][wildcards.assemAnn], attempt),
         download_slots = 1
     run:
         result = GenDB.download_unzip_genome(wildcards.assemAnn, params.outdir,
-                                             params.datasets, chrscale = True)
+                                             params.datasets, chrscale = True,
+                                             threads = threads)
         if result != 0:
             raise ValueError("The download of the genome {} failed.".format(wildcards.assemAnn))
-
-rule gzip_fasta_file:
-    """
-    In this step zip the fasta file to conserve space.
-    """
-    input:
-        genome = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta",
-    output:
-        genome = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chr.fasta.gz"
-    threads: 1
-    group: "dlgz"
-    resources:
-        mem_mb  = 1333, # 1 GB of RAM
-        time    = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn]),
-        runtime = lambda wildcards: GenDB.gzip_get_time(config["assemAnn_to_scaflen"][wildcards.assemAnn])
-    params:
-        outdir   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/",
-    shell:
-        """
-        echo "Gzipping the fasta file."
-        gzip < {input.genome} > {output.genome}
-        """
 
 rule dlPepGff:
     """
     Because the other rule downloads only the chromosome-scale scaffolds, we need to download
       the pep file and gff file for this entry.
 
-    Same structure as the previous download task.
+    The data package is downloaded into a job-local temporary directory and only protein.faa
+      and genomic.gff are extracted from it, so no pepDl/ directory, zip or NCBI metadata files
+      are left in the database. A failed download now fails the job instead of being ignored.
     """
-    input:
     output:
-        readme   = temp(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/pepDl/README.md"),
-        assembly = temp(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/pepDl/{assemAnn}.pepAndGff.zip"),
         protein  = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.pep", non_empty=True)),
         gff      = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.gff", non_empty=True))
     retries: 3
     params:
         datasets = os.path.join(bin_path, "datasets"),
-        outdir   = config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/pepDl/",
-        APIstring = "" if "API_key" not in locals() else "--api-key {}".format(locals()["API_key"])
     threads: 1
     resources:
         mem_mb  = 987, # Usually only uses 100MB of RAM
-        time    = 10,  # 10 minutes.
         runtime = 10,
         download_slots = 1
     shell:
@@ -154,28 +130,17 @@ rule dlPepGff:
         echo "Sleeping for $SLEEPTIME seconds to avoid overloading the NCBI servers."
         sleep $SLEEPTIME
 
-        # Save the current directory
-        # Function to download the file
-        RETURNHERE=$(pwd)
-        cd {params.outdir}
+        WORKDIR=$(mktemp -d "${{TMPDIR:-/tmp}}/chrombase_pepgff.XXXXXX")
+        trap 'rm -rf "$WORKDIR"' EXIT
+
+        # NCBI_API_KEY, if set, raises the NCBI request limit. The key itself is not echoed.
         {params.datasets} download genome accession {wildcards.assemAnn} \
-            {params.APIstring} \
-            --include protein,gff3,gtf \
-            --filename {wildcards.assemAnn}.pepAndGff.zip || true
+            ${{NCBI_API_KEY:+--api-key "$NCBI_API_KEY"}} \
+            --include protein,gff3 --no-progressbar \
+            --filename "$WORKDIR/{wildcards.assemAnn}.zip"
 
-        # now we try to unzip it
-        unzip -o {wildcards.assemAnn}.pepAndGff.zip
-
-        # go back to the original directory
-        cd $RETURNHERE
-
-        # move the gff and faa files to the correct location
-        find {params.outdir} -name "*.faa" -exec mv {{}} {output.protein} \\;
-        find {params.outdir} -name "*.gff" -exec mv {{}} {output.gff} \\;
-        # remove the gtf file if it exists
-        find {params.outdir} -name "*.gtf" -exec rm {{}} \\;
-
-        # check if the output protein file exists
+        unzip -p "$WORKDIR/{wildcards.assemAnn}.zip" "ncbi_dataset/data/{wildcards.assemAnn}/protein.faa" > {output.protein}
+        unzip -p "$WORKDIR/{wildcards.assemAnn}.zip" "ncbi_dataset/data/{wildcards.assemAnn}/genomic.gff" > {output.gff}
         """
 
 rule prep_chrom_file_from_NCBI:
@@ -193,7 +158,7 @@ rule prep_chrom_file_from_NCBI:
         pep    = temp(ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.pep",   non_empty=True)),
         report = ensure(config["tool"] + "/output/source_data/annotated_genomes/{assemAnn}/{assemAnn}.chrFilt.report.txt", non_empty=True)
     threads: 1
-    retries: 7
+    retries: 4 # failures here are mostly data problems that more RAM or time will not fix
     resources:
         mem_mb  = GenDB.prep_chrom_get_mem_mb, # shouldn't take much RAM, 231228 - I have seen mostly 200 MB or less. Sometimes it blows up to multiple GB.
         time    = GenDB.prep_chrom_get_time,    # Most of these end by 5 minutes, but occassionally they take longer.
@@ -262,9 +227,14 @@ rule generate_assembled_config_entry:
         # strip leading and trailing whitespace from the column names because pandas can screw up sometimes
         df.columns = df.columns.str.strip()
 
-        # read in the report into pandas if we can. Strip all the excess whitespace since the columns are formatted with whitespace
-        reportdf = pd.read_csv(input.report, comment = "#", delim_whitespace=True)
-        minscaflen = reportdf["scaflen"].min() - 1000
+        # minscaflen is the smallest chromosome-scale scaffold that carries a protein, minus 1000 bp.
+        #  It used to be read from the per-scaffold table in the NCBIgff2chrom.py report, which the bundled
+        #  version of that script no longer writes. The lengths come from the scaffold table saved by dlChrs.
+        scaf_df = pd.read_csv(os.path.join(os.path.dirname(input.chrom), wildcards.assemAnn + ".scaffold_df.chr.tsv"), sep="\t")
+        scafs_with_proteins = set(pd.read_csv(input.chrom, sep="\t", header=None, usecols=[1], names=["scaf"])["scaf"])
+        name_col = max([c for c in ["genbank_accession", "refseq_accession"] if c in scaf_df.columns],
+                       key = lambda c: scaf_df[c].isin(scafs_with_proteins).sum())
+        minscaflen = scaf_df.loc[scaf_df[name_col].isin(scafs_with_proteins), "length"].min() - 1000
 
         row = df.loc[df["Assembly Accession"] == wildcards.assemAnn]
         taxid = int(row["Organism Taxonomic ID"].values[0])

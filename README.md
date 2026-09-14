@@ -64,6 +64,37 @@ snakemake -s src/GenDB_build_db_unannotated_chr.snakefile --cores <n>
 The workflows rely on the NCBI `datasets` and `dataformat` command-line
 tools, which must be installed and discoverable in your `PATH`.
 
+## Running a build on SLURM
+
+`scripts/run_build_slurm.sh` is a controller job for the two build workflows.
+Submit it from the database directory, the one with `config.yaml`:
+
+```bash
+export CHROMBASE=/path/to/chrombase
+export NCBI_API_KEY=...   # optional, raises the NCBI request limit
+sbatch $CHROMBASE/scripts/run_build_slurm.sh annotated     # or: unannotated
+```
+
+The wrapper runs Snakemake with two flags that matter for a database that is
+rebuilt over time:
+- `--rerun-triggers mtime`: editing a snakefile does not rebuild genomes that
+  are already finished.
+- `--drop-metadata`: `.snakemake/metadata` does not grow by one file per output.
+
+A finished genome directory holds only these files:
+
+- annotated: `.chr.fasta.gz`, `.chrFilt.pep.gz`, `.chrFilt.chrom.gz`,
+  `.chrFilt.report.txt`, `.scaffold_df.all.tsv`, `.scaffold_df.chr.tsv`,
+  `.yaml.part`
+- unannotated: `.chr.fasta.gz`, `_annotated_with_<LG>.pep.gz`,
+  `_annotated_with_<LG>.chrom.gz`, the two `.scaffold_df` tables and
+  `.yaml.part`, plus `mapped_reads/<acc>/<LG>_to_<acc>.filt.paf`
+
+NCBI downloads are staged in `$TMPDIR` and removed when the job ends, so an
+interrupted job does not leave data packages or uncompressed FASTA files in
+the database. Raw miniprot alignments are deleted once they have been
+filtered.
+
 ## Cleaning stale genome directories
 
 When accession TSV files change you may want to remove genomes that are no
